@@ -144,7 +144,9 @@ export default function Header() {
           <nav className="nav-links">
             <NavLink to="/" onClick={closeMenu}>Home</NavLink>
             <NavLink to="/services" onClick={closeMenu}>Services</NavLink>
+            <NavLink to="/study" onClick={closeMenu}>Courses</NavLink>
             <NavLink to="/jobs" onClick={closeMenu}>Jobs</NavLink>
+            <NavLink to="/about" onClick={closeMenu}>About</NavLink>
 
             {/* ✅ CONTACT ADDED */}
             <NavLink to="/contact" onClick={closeMenu}>
@@ -159,6 +161,16 @@ export default function Header() {
               }
             >
               Shop
+            </NavLink>
+
+            <NavLink
+              to="/login"
+              onClick={closeMenu}
+              className={({ isActive }) =>
+                `shop-link ${isActive ? 'active' : ''}`
+              }
+            >
+              Login
             </NavLink>
           </nav>
         </div>

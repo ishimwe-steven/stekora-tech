@@ -254,7 +254,7 @@ export default function Home() {
           font-size: 0.875rem;
           color: var(--lightgray);
         }}
-                  @media (max-width: 480px) {
+        @media (max-width: 480px) {
            .hero-pretitle {
             text-transform: uppercase;
             letter-spacing: 0.15em;
@@ -276,7 +276,7 @@ export default function Home() {
         }
           .inline-block {
             margin-bottom: 1rem;
-}
+          }
         `}
       </style>
 
@@ -326,7 +326,7 @@ export default function Home() {
             </p>
             <div className="pt-4">
               <a
-                href="#contact" // or real link
+                href="Contact" // or real link
                 className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-8 rounded-lg transition shadow-md hover:shadow-lg"
               >
                 Get in Touch
