@@ -5,8 +5,21 @@ import logo from '../assets/image/logo.png';
 export default function Header() {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!(localStorage.getItem('studentToken') || localStorage.getItem('token'))
+  );
 
   const closeMenu = () => setIsMobileMenuOpen(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem('studentToken');
+    localStorage.removeItem('studentName');
+    localStorage.removeItem('studentCourseName');
+    localStorage.removeItem('token');
+    setIsLoggedIn(false);
+    closeMenu();
+    navigate('/');
+  };
 
   return (
     <>
@@ -163,15 +176,29 @@ export default function Header() {
               Shop
             </NavLink>
 
-            <NavLink
-              to="/login"
-              onClick={closeMenu}
-              className={({ isActive }) =>
-                `shop-link ${isActive ? 'active' : ''}`
-              }
-            >
-              Login
-            </NavLink>
+            {!isLoggedIn ? (
+              <NavLink
+                to="/login"
+                onClick={closeMenu}
+                className={({ isActive }) =>
+                  `shop-link ${isActive ? 'active' : ''}`
+                }
+              >
+                Login
+              </NavLink>
+            ) : (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="shop-link"
+                style={{
+                  background: 'transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                Logout
+              </button>
+            )}
           </nav>
         </div>
       </header>

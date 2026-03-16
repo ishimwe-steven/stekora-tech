@@ -1,13 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 export default function UserRegister() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    name: '',
+    full_name: '',
     email: '',
+    phone: '',
     password: '',
+    course_id: '',
   });
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function loadCourses() {
+      try {
+        const { data } = await api.get('/courses');
+        setCourses(data);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    loadCourses();
+  }, []);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -15,9 +32,17 @@ export default function UserRegister() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    localStorage.setItem('userToken', 'demo-user-token');
-    alert('Account created (demo). You are now logged in.');
-    navigate('/');
+    setLoading(true);
+    api.post('/students/register', form)
+      .then(() => {
+        alert('Registration successful. Please login.');
+        navigate('/login');
+      })
+      .catch((err) => {
+        console.error(err);
+        alert(err.response?.data?.msg || 'Registration failed');
+      })
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -124,9 +149,9 @@ export default function UserRegister() {
               <label>Full Name</label>
               <input
                 type="text"
-                name="name"
+                name="full_name"
                 required
-                value={form.name}
+                value={form.full_name}
                 onChange={handleChange}
               />
             </div>
@@ -143,6 +168,34 @@ export default function UserRegister() {
             </div>
 
             <div className="form-group" style={{ marginTop: '0.85rem' }}>
+              <label>Phone</label>
+              <input
+                type="text"
+                name="phone"
+                required
+                value={form.phone}
+                onChange={handleChange}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginTop: '0.85rem' }}>
+              <label>Course</label>
+              <select
+                name="course_id"
+                required
+                value={form.course_id}
+                onChange={handleChange}
+              >
+                <option value="">Select a course</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group" style={{ marginTop: '0.85rem' }}>
               <label>Password</label>
               <input
                 type="password"
@@ -154,7 +207,7 @@ export default function UserRegister() {
             </div>
 
             <button className="auth-btn" type="submit">
-              Create Account
+              {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </form>
 

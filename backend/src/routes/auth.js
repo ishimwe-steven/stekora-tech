@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
+const auth = require('../middleware/auth');
 
 /* ======================
    REGISTER ADMIN (ONCE)
@@ -75,6 +76,44 @@ router.post('/login', async (req, res) => {
     );
 
     res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+/* ======================
+   CHANGE ADMIN PASSWORD
+   POST /api/auth/change-password
+====================== */
+router.post('/change-password', auth, async (req, res) => {
+  const { current_password, new_password } = req.body;
+
+  if (!current_password || !new_password) {
+    return res.status(400).json({ msg: 'Missing fields' });
+  }
+
+  try {
+    const [rows] = await pool.query('SELECT * FROM admins WHERE id = ?', [
+      req.admin.id,
+    ]);
+    if (rows.length === 0) {
+      return res.status(404).json({ msg: 'Admin not found' });
+    }
+
+    const admin = rows[0];
+    const match = await bcrypt.compare(current_password, admin.password);
+    if (!match) {
+      return res.status(401).json({ msg: 'Current password is incorrect' });
+    }
+
+    const hashed = await bcrypt.hash(new_password, 10);
+    await pool.query('UPDATE admins SET password = ? WHERE id = ?', [
+      hashed,
+      admin.id,
+    ]);
+
+    res.json({ msg: 'Password updated successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });

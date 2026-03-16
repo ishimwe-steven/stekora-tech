@@ -35,7 +35,7 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // 🔍 FILTER PRODUCTS (LIVE SEARCH)
+  // FILTER PRODUCTS
   const filteredProducts = products.filter((p) =>
     `${p.name} ${p.description}`
       .toLowerCase()
@@ -44,7 +44,6 @@ export default function Home() {
 
   return (
     <>
-      {/* ===== INTERNAL CSS ===== */}
       <style>
         {`
         :root {
@@ -63,6 +62,7 @@ export default function Home() {
         }
 
         /* ===== SLIDER ===== */
+
         .ad-slider {
           position: relative;
           width: 100vw;
@@ -119,8 +119,22 @@ export default function Home() {
         .ad-dot.active {
           background: yellow;
         }
+        .hero-pretitle {
+          text-transform: uppercase;
+          letter-spacing: 4px;
+          font-weight: 700;
+          font-size: 1.875rem;
+          color: var(--cyan);
+          margin-bottom: 0.75rem;
+        }
+
+
+        /* MOBILE SLIDER */
+
         @media (max-width: 480px) {
-        .ad-slider {
+
+        
+          .ad-slider {
            height: 100%;
            width: 100%;
            
@@ -143,50 +157,76 @@ export default function Home() {
           width: 6px;
           height: 6px;
          }
-        }
-        @media (max-width: 768px) {
-       .ad-slider {
-         width: 100%;
-        height:90%;
-    
-  }
-}
-
+          }
+      
 
         /* ===== PAGE ===== */
+
         .home-container {
           max-width: 72rem;
           margin: 0 auto;
           padding: 2.5rem 1rem;
         }
-          @media (min-width: 768px) {
 
         /* ===== HERO ===== */
+
         .hero-section {
           display: grid;
-          gap: 2.5rem;
+          gap: 2rem;
           grid-template-columns: 1fr;
           margin-bottom: 2.5rem;
+          align-items: center;
         }
 
         @media(min-width: 768px) {
-          .hero-section {
-            grid-template-columns: repeat(2, 1fr);
+          .ad-slider {
+           height: 100%;
+           width: 100%;
+           
+         }
+          .ad-slide {
+            height: 100%;
+            
           }
-        }
-           .hero-pretitle {
-            text-transform: uppercase;
-            letter-spacing: 0.25em;
-            font-weight: 600;
-            font-size: 0.875rem;
-            color: var(--cyan);
-            margin-bottom: 0.75rem;
+        
+        .ad-arrow {
+          font-size: 1.1rem;
+          padding: 0.2rem 0.4rem;
+         }
+
+        .ad-dots {
+          bottom: 0.4rem;
+         }
+
+        .ad-dot {
+          width: 6px;
+          height: 6px;
+         }
           }
 
+          .hero-section {
+            grid-template-columns: repeat(2,1fr);
+          }
+        }
+
+         .hero-pretitle {
+          text-transform: uppercase;
+          letter-spacing: 4px;
+          font-weight: 700;
+          font-size: 1.875rem;
+          color: var(--cyan);
+          margin-bottom: 0.75rem;
+        }
 
         .hero-title {
           font-size: 2.25rem;
           font-weight: 700;
+          line-height: 1.3;
+        }
+
+        .hero-description {
+          margin-top: 0.75rem;
+          font-size: 0.95rem;
         }
 
         .gradient-text {
@@ -197,24 +237,25 @@ export default function Home() {
 
         .hero-image {
           width: 100%;
-          height: 4rem;
+          height: 220px;
           border-radius: 1rem;
           object-fit: cover;
           border: 1px solid var(--richblue);
         }
 
-        @media(min-width: 768px) {
-          .hero-image {
-            height: 20rem;
+        @media(min-width:768px){
+          .hero-image{
+            height:320px;
           }
         }
 
-
         /* ===== FEATURED ===== */
+
         .featured-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          flex-wrap: wrap;
           gap: 1rem;
           margin-bottom: 1rem;
         }
@@ -225,12 +266,15 @@ export default function Home() {
           border: 1px solid var(--lightgray);
           font-size: 0.85rem;
           outline: none;
-          min-width: 620px;
+          width: 100%;
+          max-width: 400px;
         }
 
         .search-input:focus {
           border-color: var(--richblue);
         }
+
+        /* ===== PRODUCTS GRID ===== */
 
         .products-grid {
           display: grid;
@@ -238,45 +282,73 @@ export default function Home() {
           gap: 1rem;
         }
 
-        @media(min-width: 640px) {
-          .products-grid {
-            grid-template-columns: repeat(2, 1fr);
+        @media(min-width:640px){
+         .ad-slider {
+           height: 100%;
+           width: 100%;
+           
+         }
+          .ad-slide {
+            height: 100%;
+            
+          }
+        
+        .ad-arrow {
+          font-size: 1.1rem;
+          padding: 0.2rem 0.4rem;
+         }
+
+        .ad-dots {
+          bottom: 0.4rem;
+         }
+
+        .ad-dot {
+          width: 6px;
+          height: 6px;
+         }
+          }
+          .products-grid{
+            grid-template-columns:repeat(2,1fr);
           }
         }
 
-        @media(min-width: 768px) {
-          .products-grid {
-            grid-template-columns: repeat(3, 1fr);
+        @media(min-width:1024px){
+          .products-grid{
+            grid-template-columns:repeat(3,1fr);
           }
         }
 
-        .no-products {
-          font-size: 0.875rem;
-          color: var(--lightgray);
-        }}
-        @media (max-width: 480px) {
-           .hero-pretitle {
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-            font-weight: 500;
-            font-size: 0.875rem;
-            color: var(--cyan);
-            margin-bottom: 0.25rem;
-          }
-          .hero-title {
-          font-size: 1.5rem; 
-          }
-          .hero-description {
-           font-size: 0.9rem;
-            }
-          .gradient-text {
-          background: linear-gradient(to right, var(--cyan), var(--indigo));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+        .no-products{
+          font-size:0.875rem;
+          color:var(--lightgray);
         }
-          .inline-block {
-            margin-bottom: 1rem;
+
+        /* SMALL MOBILE */
+
+        @media (max-width:480px){
+          .hero-section{
+            margin-top:-2rem
+          } 
+          .hero-title{
+            font-size:1.6rem;
+            
           }
+
+          .hero-description{
+            font-size:0.9rem;
+          }
+
+          .featured-header{
+            flex-direction:column;
+            align-items:flex-start;
+          }
+
+          .search-input{
+            max-width:100%;
+          }
+
+        }
+          
         `}
       </style>
 
@@ -290,7 +362,8 @@ export default function Home() {
             alt="Advertisement"
           />
         ))}
-         <button
+
+        <button
           className="ad-arrow left"
           onClick={() =>
             setCurrent((current - 1 + banners.length) % banners.length)
@@ -307,26 +380,29 @@ export default function Home() {
         >
           ›
         </button>
-
       </div>
 
       {/* ===== PAGE CONTENT ===== */}
       <div className="home-container">
+
         {/* HERO */}
         <section className="hero-section">
           <div>
-             <p className="hero-pretitle">Stekora Tech</p>
+            <p className="hero-pretitle">Stekora Tech</p>
+
             <h1 className="hero-title">
               Where ideas become <span className="gradient-text">digital solutions</span>
             </h1>
+
             <p className="hero-description">
               We are an IT services studio delivering web applications, embedded
               systems and automation. From concept to deployment, we help you
               design, build and manage reliable digital products.
             </p>
+
             <div className="pt-4">
               <a
-                href="Contact" // or real link
+                href="Contact"
                 className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-8 rounded-lg transition shadow-md hover:shadow-lg"
               >
                 Get in Touch
@@ -345,7 +421,6 @@ export default function Home() {
               <span>Good quality and reliability</span>
             </div>
 
-            {/* 🔍 SEARCH */}
             <input
               type="text"
               className="search-input"
@@ -365,6 +440,7 @@ export default function Home() {
             )}
           </div>
         </section>
+
       </div>
     </>
   );

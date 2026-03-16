@@ -1,18 +1,38 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import api from '../services/api';
 
 export default function StudentDashboard() {
-  const [courses, setCourses] = useState([]);
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const stored = localStorage.getItem('studentCourses');
-    if (stored) {
+    const token = localStorage.getItem('studentToken');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    async function load() {
       try {
-        setCourses(JSON.parse(stored));
-      } catch {
-        setCourses([]);
+        const { data } = await api.get('/students/dashboard', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        setData(data);
+      } catch (err) {
+        console.error(err);
+        setError(err.response?.data?.msg || 'Failed to load dashboard');
+      } finally {
+        setLoading(false);
       }
     }
-  }, []);
+
+    load();
+  }, [navigate]);
 
   return (
     <>
@@ -118,6 +138,18 @@ export default function StudentDashboard() {
           color: #6b7280;
         }
 
+        .module-link {
+          display: block;
+          margin-top: 0.5rem;
+          font-size: 0.8rem;
+          color: #2563eb;
+          text-decoration: none;
+        }
+
+        .module-link:hover {
+          text-decoration: underline;
+        }
+
         @media (max-width: 768px) {
           .dashboard-page {
             flex-direction: column;
@@ -139,29 +171,62 @@ export default function StudentDashboard() {
             <span className="active">My Courses</span>
             <span>Profile</span>
             <span>Support</span>
+            <span
+              onClick={() => {
+                localStorage.removeItem('studentToken');
+                localStorage.removeItem('studentName');
+                localStorage.removeItem('studentCourseName');
+                navigate('/login');
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              Logout
+            </span>
           </div>
         </aside>
 
         <main className="dashboard-main">
-          <h1 className="dashboard-title">My Courses</h1>
-          <p className="dashboard-sub">
-            Here are the courses you have applied for and that are currently in progress.
-          </p>
+          {loading && <p className="dashboard-sub">Loading dashboard...</p>}
+          {error && !loading && <p className="dashboard-sub">{error}</p>}
 
-          {courses.length === 0 ? (
-            <p className="dashboard-sub">
-              You have not applied for any course yet. Go to the Courses page and choose a program.
-            </p>
-          ) : (
-            <div className="course-list">
-              {courses.map((course, index) => (
-                <div key={index} className="course-card">
-                  <div className="course-name">{course}</div>
-                  <div className="course-status">Status: In progress</div>
-                  <div className="course-meta">Start date: to be confirmed</div>
-                </div>
-              ))}
-            </div>
+          {data && (
+            <>
+              <h1 className="dashboard-title">
+                Welcome, {data.student.full_name}
+              </h1>
+              {data.course ? (
+                <>
+                  <p className="dashboard-sub">
+                    Course: <strong>{data.course.name}</strong>
+                  </p>
+                  <p className="dashboard-sub">
+                    Below are your modules and available materials.
+                  </p>
+
+                  <div className="course-list">
+                    {data.modules.map((m) => (
+                      <div key={m.id} className="course-card">
+                        <div className="course-name">{m.title}</div>
+                        <div className="course-status">
+                          Materials: {m.materials.length}
+                        </div>
+                        <Link
+                          to={`/student/course/${data.course.id}/module/${m.id}`}
+                          className="module-link"
+                        >
+                          View notes &amp; videos
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="dashboard-sub">
+                  You are not yet enrolled in a course. Go to the Courses page
+                  and select a program.
+                </p>
+              )}
+            </>
           )}
         </main>
       </div>

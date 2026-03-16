@@ -50,7 +50,7 @@ export default function SiteLayout() {
             font-size: 0.8rem;
             font-weight: 600;
             color: #fff;
-            background: linear-gradient(135deg, #facc15, rgb(143, 116, 10));
+            background-color: #4f46e5;
             box-shadow: 0 8px 18px rgba(0,0,0,0.16);
             white-space: nowrap;
           }
@@ -67,7 +67,7 @@ export default function SiteLayout() {
           }
 
           .fab-button.secondary {
-            background: linear-gradient(135deg, #facc15, rgb(143, 116, 10));
+            background-color: #4f46e5;
           }
 
           .fab-button.whatsapp {
@@ -137,7 +137,7 @@ export default function SiteLayout() {
             className="fab-button whatsapp"
             onClick={() =>
               window.open(
-                'https://wa.me/250788000000?text=Hello%20Stekora%20Tech',
+                'https://wa.me/250780959065?text=Hello%20Stekora%20Tech',
                 '_blank'
               )
             }

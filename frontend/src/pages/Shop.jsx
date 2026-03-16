@@ -66,24 +66,48 @@ export default function Shop() {
           h1 {
             font-size: 2rem;
             font-weight: 700;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
           }
 
-          /* ✅ SEARCH BAR */
-          .search-box {
-            width: 100%;
-            max-width: 400px;
-            padding: 0.7rem 1rem;
-            border-radius: 8px;
-            border: 1px solid #ddd;
+          /* SEARCH BAR WRAPPER */
+          .shop-search-row {
+            background: #111827;
+            padding: 1rem;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            max-width: 520px;
             margin-bottom: 2rem;
-            font-size: 0.95rem;
+          }
+
+          .shop-search-input {
+            flex: 1;
+            padding: 0.6rem 0.9rem;
+            border-radius: 999px 0 0 999px;
+            border: 1px solid #4b5563;
+            background: transparent;
+            color: #e5e7eb;
+            font-size: 0.9rem;
             outline: none;
           }
 
-          .search-box:focus {
-            border-color: var(--yellow);
-            box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3);
+          .shop-search-input::placeholder {
+            color: #9ca3af;
+          }
+
+          .shop-search-button {
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: none;
+            margin-left: 0.5rem;
+            background: #f59e0b;
+            color: #111827;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            cursor: pointer;
           }
 
           .products-grid {
@@ -118,13 +142,22 @@ export default function Shop() {
         <h1>Shop</h1>
 
         {/* 🔍 SEARCH BAR */}
-        <input
-          type="text"
-          className="search-box"
-          placeholder="Search products or services..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        <div className="shop-search-row">
+          <input
+            type="text"
+            className="shop-search-input"
+            placeholder="Search For Product......"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <button
+            type="button"
+            className="shop-search-button"
+            aria-label="Search"
+          >
+            🔍
+          </button>
+        </div>
 
         {/* Loading */}
         {loading && <p className="status-text">Loading products…</p>}

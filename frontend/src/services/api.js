@@ -7,11 +7,11 @@ const api = axios.create({
   baseURL,
 });
 
-// Attach JWT token for admin-protected routes
+// Attach JWT token for admin-protected routes by default
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;

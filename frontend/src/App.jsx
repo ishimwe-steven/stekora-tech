@@ -11,6 +11,7 @@ import UserLogin from './pages/UserLogin';
 import UserRegister from './pages/UserRegister';
 import About from './pages/About';
 import StudentDashboard from './pages/StudentDashboard';
+import StudentModuleView from './pages/StudentModuleView';
 import AdminLogin from './pages/AdminLogin';
 import RegisterAdmin from './pages/RegisterAdmin';
 import AdminDashboard from './pages/AdminDashboard';
@@ -32,7 +33,8 @@ export default function App() {
       </Route>
       <Route path="/login" element={<UserLogin />} />
       <Route path="/register" element={<UserRegister />} />
-      <Route path="/student" element={<StudentDashboard />} />
+      <Route path="/student/dashboard" element={<StudentDashboard />} />
+      <Route path="/student/course/:courseId/module/:moduleId" element={<StudentModuleView />} />
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/register" element={<RegisterAdmin />} />

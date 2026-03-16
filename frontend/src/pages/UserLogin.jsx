@@ -1,37 +1,47 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 export default function UserLogin() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('student'); // 'student' or 'admin'
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    localStorage.setItem('userToken', 'demo-user-token');
-
-    const selected = localStorage.getItem('selectedCourse');
-    if (selected) {
-      const existingRaw = localStorage.getItem('studentCourses');
-      let existing = [];
-      if (existingRaw) {
-        try {
-          existing = JSON.parse(existingRaw);
-        } catch {
-          existing = [];
+    setLoading(true);
+    try {
+      if (mode === 'student') {
+        const { data } = await api.post('/students/login', form);
+        localStorage.setItem('studentToken', data.token);
+        if (data.student) {
+          localStorage.setItem('studentName', data.student.full_name);
+          if (data.student.course) {
+            localStorage.setItem('studentCourseName', data.student.course.name);
+          }
         }
+        alert('Logged in successfully.');
+        navigate('/student/dashboard');
+      } else {
+        const { data } = await api.post('/auth/login', {
+          username: form.email,
+          password: form.password,
+        });
+        localStorage.setItem('token', data.token);
+        alert('Admin logged in.');
+        navigate('/admin');
       }
-      if (!existing.includes(selected)) {
-        existing.push(selected);
-        localStorage.setItem('studentCourses', JSON.stringify(existing));
-      }
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Login failed');
+    } finally {
+      setLoading(false);
     }
-
-    alert('Logged in successfully (demo).');
-    navigate('/student');
   };
 
   const selectedCourse = localStorage.getItem('selectedCourse');
@@ -117,7 +127,7 @@ export default function UserLogin() {
           font-weight: 600;
           color: #fff;
           cursor: pointer;
-          background: linear-gradient(135deg, #ff4b8b, #9b5bff);
+          background: linear-gradient(135deg, #4f46e5, #5a67d8);
         }
 
         .auth-btn:hover {
@@ -145,16 +155,53 @@ export default function UserLogin() {
               Applying for: {selectedCourse}
             </div>
           )}
-          <h1 className="auth-title">Student Login</h1>
+          <h1 className="auth-title">
+            {mode === 'student' ? 'Student Login' : 'Admin Login'}
+          </h1>
           <p className="auth-sub">
-            Login to continue your application and access your study dashboard.
+            {mode === 'student'
+              ? 'Login to continue your application and access your study dashboard.'
+              : 'Login to manage courses, modules, materials and students.'}
           </p>
+
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+            <button
+              type="button"
+              onClick={() => setMode('student')}
+              style={{
+                flex: 1,
+                padding: '0.4rem 0.6rem',
+                borderRadius: '999px',
+                border: mode === 'student' ? '1px solid #6366f1' : '1px solid #e5e7eb',
+                background: mode === 'student' ? '#EEF2FF' : '#fff',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+              }}
+            >
+              Student
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('admin')}
+              style={{
+                flex: 1,
+                padding: '0.4rem 0.6rem',
+                borderRadius: '999px',
+                border: mode === 'admin' ? '1px solid #6366f1' : '1px solid #e5e7eb',
+                background: mode === 'admin' ? '#EEF2FF' : '#fff',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+              }}
+            >
+              Admin
+            </button>
+          </div>
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Email</label>
+              <label>{mode === 'student' ? 'Email' : 'Username'}</label>
               <input
-                type="email"
+                type={mode === 'student' ? 'email' : 'text'}
                 name="email"
                 required
                 value={form.email}
@@ -174,7 +221,7 @@ export default function UserLogin() {
             </div>
 
             <button className="auth-btn" type="submit">
-              Login
+              {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
 
