@@ -208,16 +208,16 @@ export default function Contact() {
                     <option>Mobile App Development</option>
                     <option>IoT / Embedded Systems</option>
                     <option>Automation & Integration</option>
-                    <option>Custom Software</option>
+                    <option>Other services</option>
                   </select>
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Project Description</label>
+                <label>Write a message</label>
                 <textarea
                   name="message"
-                  placeholder="Tell us about your project or job request..."
+                  placeholder="write us a message..."
                   required
                   value={form.message}
                   onChange={handleChange}

@@ -17,6 +17,49 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+async function ensureLearningTables() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS module_quizzes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      module_id INT NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      question TEXT NOT NULL,
+      option_a VARCHAR(255) NOT NULL,
+      option_b VARCHAR(255) NOT NULL,
+      option_c VARCHAR(255),
+      option_d VARCHAR(255),
+      correct_option VARCHAR(1) NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_module_quiz (module_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS module_completions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      student_id INT NOT NULL,
+      module_id INT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_student_module (student_id, module_id)
+    )
+  `);
+}
+
+async function ensureCourseImageColumn() {
+  const [columns] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'courses'
+       AND COLUMN_NAME = 'image_url'`
+  );
+
+  if (columns.length === 0) {
+    await pool.query('ALTER TABLE courses ADD COLUMN image_url VARCHAR(500) NULL');
+  }
+}
+
 /* =========================
    COURSES
 ========================= */
@@ -24,8 +67,9 @@ const upload = multer({ storage });
 // GET /api/courses
 router.get('/', async (req, res) => {
   try {
+    await ensureCourseImageColumn();
     const [rows] = await pool.query(
-      'SELECT id, name, description FROM courses ORDER BY id ASC'
+      'SELECT id, name, description, image_url FROM courses ORDER BY id ASC'
     );
     res.json(rows);
   } catch (err) {
@@ -35,17 +79,19 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/courses  (admin)
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, upload.single('image'), async (req, res) => {
   const { name, description } = req.body;
   if (!name) return res.status(400).json({ msg: 'Name is required' });
 
   try {
+    await ensureCourseImageColumn();
+    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const [result] = await pool.query(
-      'INSERT INTO courses (name, description) VALUES (?, ?)',
-      [name, description || null]
+      'INSERT INTO courses (name, description, image_url) VALUES (?, ?, ?)',
+      [name, description || null, imageUrl]
     );
     const [[course]] = await pool.query(
-      'SELECT id, name, description FROM courses WHERE id = ?',
+      'SELECT id, name, description, image_url FROM courses WHERE id = ?',
       [result.insertId]
     );
     res.status(201).json(course);
@@ -56,17 +102,19 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/courses/:id (admin)
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, upload.single('image'), async (req, res) => {
   const { id } = req.params;
   const { name, description } = req.body;
 
   try {
+    await ensureCourseImageColumn();
+    const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image_url || null;
     await pool.query(
-      'UPDATE courses SET name = ?, description = ? WHERE id = ?',
-      [name, description || null, id]
+      'UPDATE courses SET name = ?, description = ?, image_url = COALESCE(?, image_url) WHERE id = ?',
+      [name, description || null, imageUrl, id]
     );
     const [[course]] = await pool.query(
-      'SELECT id, name, description FROM courses WHERE id = ?',
+      'SELECT id, name, description, image_url FROM courses WHERE id = ?',
       [id]
     );
     res.json(course);
@@ -204,6 +252,93 @@ router.get('/modules/:moduleId/materials', async (req, res) => {
       [moduleId]
     );
     res.json(materials);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// GET /api/courses/modules/:moduleId/quiz
+router.get('/modules/:moduleId/quiz', async (req, res) => {
+  const { moduleId } = req.params;
+  try {
+    await ensureLearningTables();
+    const [[quiz]] = await pool.query(
+      `SELECT id, module_id, title, question, option_a, option_b, option_c, option_d, correct_option
+       FROM module_quizzes
+       WHERE module_id = ?`,
+      [moduleId]
+    );
+    res.json(quiz || null);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// POST /api/courses/modules/:moduleId/quiz (admin)
+router.post('/modules/:moduleId/quiz', auth, async (req, res) => {
+  const { moduleId } = req.params;
+  const {
+    title,
+    question,
+    option_a,
+    option_b,
+    option_c,
+    option_d,
+    correct_option,
+  } = req.body;
+
+  if (!title || !question || !option_a || !option_b || !correct_option) {
+    return res.status(400).json({ msg: 'Quiz title, question, two options, and answer are required' });
+  }
+
+  try {
+    await ensureLearningTables();
+    await pool.query(
+      `INSERT INTO module_quizzes
+       (module_id, title, question, option_a, option_b, option_c, option_d, correct_option)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         title = VALUES(title),
+         question = VALUES(question),
+         option_a = VALUES(option_a),
+         option_b = VALUES(option_b),
+         option_c = VALUES(option_c),
+         option_d = VALUES(option_d),
+         correct_option = VALUES(correct_option)`,
+      [moduleId, title, question, option_a, option_b, option_c || null, option_d || null, correct_option]
+    );
+
+    const [[quiz]] = await pool.query(
+      'SELECT * FROM module_quizzes WHERE module_id = ?',
+      [moduleId]
+    );
+    res.json(quiz);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+// GET /api/courses/completions (admin notifications)
+router.get('/completions', auth, async (req, res) => {
+  try {
+    await ensureLearningTables();
+    const [rows] = await pool.query(
+      `SELECT mc.id, mc.created_at,
+              s.full_name AS student_name,
+              s.email AS student_email,
+              m.title AS module_title,
+              c.name AS course_name
+       FROM module_completions mc
+       JOIN students s ON s.id = mc.student_id
+       JOIN modules m ON m.id = mc.module_id
+       LEFT JOIN courses c ON c.id = m.course_id
+       ORDER BY mc.created_at DESC
+       LIMIT 50`
+    );
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });

@@ -204,7 +204,7 @@ export default function About() {
             <div className="team-grid">
               <div className="team-card">
                 <div className="team-avatar">👤</div>
-                <div className="team-name">Regis Francois BYIRINGIRO</div>
+                <div className="team-name">Steven</div>
                 <div className="team-role">CEO &amp; Founder</div>
                 <div className="team-bio">
                   Leads overall vision, projects and partnerships.
@@ -213,7 +213,7 @@ export default function About() {
 
               <div className="team-card">
                 <div className="team-avatar">👤</div>
-                <div className="team-name">Francois XAVER</div>
+                <div className="team-name">Tabitha</div>
                 <div className="team-role">Chief Technology Officer</div>
                 <div className="team-bio">
                   Oversees technology choices and engineering quality.
@@ -234,10 +234,10 @@ export default function About() {
             <div className="partners-strip">
               <div className="partners-label">Our Partners</div>
               <div className="partners-logos">
-                <span>Lenovo</span>
-                <span>Legrand</span>
-                <span>D-Link</span>
-                <span>Valorwa</span>
+                <span>Nadev Solution</span>
+                <span>Code Rwanda Tech</span>
+                <span></span>
+                <span></span>
               </div>
             </div>
           </section>

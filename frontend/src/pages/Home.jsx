@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import ProductCard from '../components/ProductCard';
 import heroImage from "../assets/image/hero.jpg";
 
 export default function Home() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
-  const [search, setSearch] = useState('');
   const [current, setCurrent] = useState(0);
 
   const banners = [
@@ -19,7 +20,8 @@ export default function Home() {
     async function load() {
       try {
         const { data } = await api.get('/products');
-        setProducts(data.slice(0, 3));
+        const productList = Array.isArray(data) ? data : data.products || [];
+        setProducts(productList.slice(0, 3));
       } catch (err) {
         console.error(err);
       }
@@ -34,13 +36,6 @@ export default function Home() {
     }, 5000);
     return () => clearInterval(timer);
   }, []);
-
-  // FILTER PRODUCTS
-  const filteredProducts = products.filter((p) =>
-    `${p.name} ${p.description}`
-      .toLowerCase()
-      .includes(search.toLowerCase())
-  );
 
   return (
     <>
@@ -132,7 +127,24 @@ export default function Home() {
         /* MOBILE SLIDER */
 
         @media (max-width: 480px) {
+        .hero-section {
+         text-align: center;
+         padding: 0 25px;
+        }
 
+  .hero-section h1,
+  .hero-section p {
+    width: 22rem;
+    margin: 0 auto;
+    margin-left: -6px;
+    
+  
+   
+  }
+        .hero-image{
+            display:none;
+          }
+        
         
           .ad-slider {
            height: 100%;
@@ -268,6 +280,7 @@ export default function Home() {
           outline: none;
           width: 100%;
           max-width: 400px;
+          cursor: pointer;
         }
 
         .search-input:focus {
@@ -402,7 +415,7 @@ export default function Home() {
 
             <div className="pt-4">
               <a
-                href="Contact"
+                href="/contact"
                 className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-8 rounded-lg transition shadow-md hover:shadow-lg"
               >
                 Get in Touch
@@ -425,17 +438,19 @@ export default function Home() {
               type="text"
               className="search-input"
               placeholder="Search products..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value=""
+              readOnly
+              onClick={() => navigate('/shop')}
+              onFocus={() => navigate('/shop')}
             />
           </div>
 
           <div className="products-grid">
-            {filteredProducts.map((p) => (
+            {products.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
 
-            {filteredProducts.length === 0 && (
+            {products.length === 0 && (
               <p className="no-products">No matching products found.</p>
             )}
           </div>

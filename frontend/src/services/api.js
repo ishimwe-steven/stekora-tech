@@ -10,7 +10,14 @@ const api = axios.create({
 // Attach JWT token for admin-protected routes by default
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const url = config.url || '';
+    const isStudentAccountRoute =
+      url.startsWith('/students/dashboard') ||
+      url.startsWith('/students/courses/') ||
+      url.startsWith('/students/modules/');
+    const token = isStudentAccountRoute
+      ? localStorage.getItem('studentToken') || localStorage.getItem('token')
+      : localStorage.getItem('token') || localStorage.getItem('studentToken');
     if (token && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }

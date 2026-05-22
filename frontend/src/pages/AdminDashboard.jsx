@@ -3,12 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import ProductForm from './ProductForm';
 
+const inferCourseCategory = (course) => {
+  const text = `${course.name || ''} ${course.description || ''}`.toLowerCase();
+  if (text.includes('iot') || text.includes('embedded')) return 'IoT';
+  if (text.includes('backend') || text.includes('api') || text.includes('node')) return 'Backend';
+  if (text.includes('design') || text.includes('photo') || text.includes('ui')) return 'Design';
+  return 'Development';
+};
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview'); // overview | courses | modules | materials | students | products | settings
+  const [activeTab, setActiveTab] = useState('overview'); // overview | courses | modules | materials | quizzes | students | products | settings
   const [overview, setOverview] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [courseForm, setCourseForm] = useState({ id: null, name: '', description: '' });
+  const [courseForm, setCourseForm] = useState({ id: null, name: '', description: '', image_url: '' });
+  const [courseImage, setCourseImage] = useState(null);
+  const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [selectedCourseForModules, setSelectedCourseForModules] = useState('');
   const [modules, setModules] = useState([]);
   const [moduleTitle, setModuleTitle] = useState('');
@@ -16,9 +26,23 @@ export default function AdminDashboard() {
   const [materialModuleId, setMaterialModuleId] = useState('');
   const [materialModules, setMaterialModules] = useState([]);
   const [materialForm, setMaterialForm] = useState({ title: '', type: 'note', file_url: '' });
+  const [materialFile, setMaterialFile] = useState(null);
   const [students, setStudents] = useState([]);
   const [products, setProducts] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [quizCourseId, setQuizCourseId] = useState('');
+  const [quizModuleId, setQuizModuleId] = useState('');
+  const [quizModules, setQuizModules] = useState([]);
+  const [quizForm, setQuizForm] = useState({
+    title: '',
+    question: '',
+    option_a: '',
+    option_b: '',
+    option_c: '',
+    option_d: '',
+    correct_option: 'A',
+  });
   const [settingsForm, setSettingsForm] = useState({
     current_password: '',
     new_password: '',
@@ -35,6 +59,7 @@ export default function AdminDashboard() {
     loadOverview();
     loadCourses();
     loadProducts();
+    loadNotifications();
   }, [navigate]);
 
   async function loadOverview() {
@@ -72,18 +97,24 @@ export default function AdminDashboard() {
   async function handleSaveCourse(e) {
     e.preventDefault();
     try {
-      if (courseForm.id) {
-        await api.put(`/courses/${courseForm.id}`, {
-          name: courseForm.name,
-          description: courseForm.description,
-        });
-      } else {
-        await api.post('/courses', {
-          name: courseForm.name,
-          description: courseForm.description,
-        });
+      const formData = new FormData();
+      formData.append('name', courseForm.name);
+      formData.append('description', courseForm.description);
+      if (courseForm.image_url) {
+        formData.append('image_url', courseForm.image_url);
       }
-      setCourseForm({ id: null, name: '', description: '' });
+      if (courseImage) {
+        formData.append('image', courseImage);
+      }
+
+      if (courseForm.id) {
+        await api.put(`/courses/${courseForm.id}`, formData);
+      } else {
+        await api.post('/courses', formData);
+      }
+      setCourseForm({ id: null, name: '', description: '', image_url: '' });
+      setCourseImage(null);
+      setCourseModalOpen(false);
       loadCourses();
     } catch (err) {
       console.error(err);
@@ -139,14 +170,90 @@ export default function AdminDashboard() {
       if (materialForm.file_url) {
         formData.append('file_url', materialForm.file_url);
       }
-      await api.post(`/courses/modules/${materialModuleId}/materials`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      if (materialFile) {
+        formData.append('file', materialFile);
+      }
+      await api.post(`/courses/modules/${materialModuleId}/materials`, formData);
       setMaterialForm({ title: '', type: 'note', file_url: '' });
+      setMaterialFile(null);
+      loadModulesForCourse(materialCourseId, true);
       alert('Material uploaded');
     } catch (err) {
       console.error(err);
-      alert('Failed to upload material');
+      alert(err.response?.data?.msg || 'Failed to upload material');
+    }
+  }
+
+  function openCourseModal(course = null) {
+    setCourseForm(
+      course
+        ? {
+            id: course.id,
+            name: course.name,
+            description: course.description || '',
+            image_url: course.image_url || '',
+          }
+        : { id: null, name: '', description: '', image_url: '' }
+    );
+    setCourseImage(null);
+    setCourseModalOpen(true);
+  }
+
+  const resolveImageUrl = (url) => {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    const base = api.defaults.baseURL.replace(/\/api\/?$/, '');
+    return `${base}${url}`;
+  };
+
+  async function loadNotifications() {
+    try {
+      const { data } = await api.get('/courses/completions');
+      setNotifications(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function loadQuizForModule(moduleId) {
+    if (!moduleId) return;
+    try {
+      const { data } = await api.get(`/courses/modules/${moduleId}/quiz`);
+      if (data) {
+        setQuizForm({
+          title: data.title || '',
+          question: data.question || '',
+          option_a: data.option_a || '',
+          option_b: data.option_b || '',
+          option_c: data.option_c || '',
+          option_d: data.option_d || '',
+          correct_option: data.correct_option || 'A',
+        });
+      } else {
+        setQuizForm({
+          title: '',
+          question: '',
+          option_a: '',
+          option_b: '',
+          option_c: '',
+          option_d: '',
+          correct_option: 'A',
+        });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function handleSaveQuiz(e) {
+    e.preventDefault();
+    if (!quizModuleId) return;
+    try {
+      await api.post(`/courses/modules/${quizModuleId}/quiz`, quizForm);
+      alert('Quiz saved for this unit');
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to save quiz');
     }
   }
 
@@ -195,7 +302,7 @@ export default function AdminDashboard() {
       return <p className="admin-sub">Loading overview...</p>;
     }
     return (
-      <div className="admin-grid">
+        <div className="admin-grid">
         <div className="admin-card">
           <div className="admin-card-label">Total Students</div>
           <div className="admin-card-number">{overview.totals.students}</div>
@@ -207,6 +314,17 @@ export default function AdminDashboard() {
         <div className="admin-card">
           <div className="admin-card-label">Total Materials</div>
           <div className="admin-card-number">{overview.totals.materials}</div>
+        </div>
+        <div className="admin-card admin-card-wide">
+          <div className="admin-card-label">Recent Unit Completion Notifications</div>
+          <ul className="admin-list">
+            {notifications.slice(0, 5).map((n) => (
+              <li key={n.id}>
+                <strong>{n.student_name}</strong> completed {n.module_title} ({n.course_name || 'Course'})
+              </li>
+            ))}
+            {notifications.length === 0 && <li>No unit completions yet.</li>}
+          </ul>
         </div>
         <div className="admin-card admin-card-wide">
           <div className="admin-card-label">Recent Students</div>
@@ -225,36 +343,54 @@ export default function AdminDashboard() {
   function renderCourses() {
     return (
       <div className="admin-section">
-        <h2 className="admin-title">Courses</h2>
-        <form className="admin-form" onSubmit={handleSaveCourse}>
-          <div className="admin-form-row">
-            <input
-              type="text"
-              placeholder="Course name"
-              value={courseForm.name}
-              onChange={(e) =>
-                setCourseForm({ ...courseForm, name: e.target.value })
-              }
-              required
-            />
-            <input
-              type="text"
-              placeholder="Description"
-              value={courseForm.description}
-              onChange={(e) =>
-                setCourseForm({ ...courseForm, description: e.target.value })
-              }
-            />
-            <button type="submit">
-              {courseForm.id ? 'Update' : 'Add'} course
-            </button>
+        <div className="admin-section-head">
+          <div>
+            <h2 className="admin-title">Courses</h2>
+            <p className="admin-sub">
+              Manage the same courses that appear on the public course page.
+            </p>
           </div>
-        </form>
+          <button type="button" className="admin-primary-btn" onClick={() => openCourseModal()}>
+            Add course
+          </button>
+        </div>
+
+        <div className="admin-course-grid">
+          {courses.map((c) => (
+            <article className="admin-course-card" key={c.id}>
+              {c.image_url && (
+                <img className="admin-course-image" src={resolveImageUrl(c.image_url)} alt="" />
+              )}
+              <div className="admin-course-category">{inferCourseCategory(c)}</div>
+              <h3>{c.name}</h3>
+              <p>{c.description || 'No course description yet.'}</p>
+              <div className="admin-course-actions">
+                <button
+                  type="button"
+                  onClick={() => openCourseModal(c)}
+                >
+                  Edit course
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('modules');
+                    setSelectedCourseForModules(String(c.id));
+                    loadModulesForCourse(c.id);
+                  }}
+                >
+                  Curriculum
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
 
         <table className="admin-table">
           <thead>
             <tr>
               <th>ID</th>
+              <th>Image</th>
               <th>Name</th>
               <th>Description</th>
               <th>Actions</th>
@@ -264,18 +400,19 @@ export default function AdminDashboard() {
             {courses.map((c) => (
               <tr key={c.id}>
                 <td>{c.id}</td>
+                <td>
+                  {c.image_url ? (
+                    <img className="admin-table-image" src={resolveImageUrl(c.image_url)} alt="" />
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td>{c.name}</td>
                 <td>{c.description}</td>
                 <td>
                   <button
                     type="button"
-                    onClick={() =>
-                      setCourseForm({
-                        id: c.id,
-                        name: c.name,
-                        description: c.description || '',
-                      })
-                    }
+                    onClick={() => openCourseModal(c)}
                   >
                     Edit
                   </button>
@@ -291,6 +428,50 @@ export default function AdminDashboard() {
             ))}
           </tbody>
         </table>
+
+        {courseModalOpen && (
+          <div className="admin-modal-backdrop" role="presentation" onClick={() => setCourseModalOpen(false)}>
+            <form
+              className="admin-modal"
+              onSubmit={handleSaveCourse}
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="admin-modal-head">
+                <h3>{courseForm.id ? 'Update course' : 'Add course'}</h3>
+                <button type="button" onClick={() => setCourseModalOpen(false)} aria-label="Close course form">
+                  X
+                </button>
+              </div>
+              <label>Course name</label>
+              <input
+                type="text"
+                value={courseForm.name}
+                onChange={(e) => setCourseForm({ ...courseForm, name: e.target.value })}
+                required
+              />
+              <label>Description</label>
+              <input
+                type="text"
+                value={courseForm.description}
+                onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
+              />
+              <label>Course image</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setCourseImage(e.target.files[0] || null)}
+              />
+              {courseForm.image_url && !courseImage && (
+                <img className="admin-modal-preview" src={resolveImageUrl(courseForm.image_url)} alt="" />
+              )}
+              <button type="submit" className="admin-primary-btn">
+                {courseForm.id ? 'Update course' : 'Add course'}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     );
   }
@@ -431,7 +612,120 @@ export default function AdminDashboard() {
                   setMaterialForm({ ...materialForm, file_url: e.target.value })
                 }
               />
+              <input
+                type="file"
+                accept={materialForm.type === 'video' ? 'video/*' : '.pdf,.doc,.docx,.ppt,.pptx,.txt,application/pdf'}
+                onChange={(e) => setMaterialFile(e.target.files[0] || null)}
+              />
               <button type="submit">Upload</button>
+            </div>
+          </form>
+        )}
+      </div>
+    );
+  }
+
+  function renderQuizzes() {
+    return (
+      <div className="admin-section">
+        <h2 className="admin-title">Unit Quiz</h2>
+        <p className="admin-sub">
+          Select a course unit and set the quiz students should answer after learning it.
+        </p>
+
+        <div className="admin-form-row" style={{ marginBottom: '1rem' }}>
+          <select
+            value={quizCourseId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQuizCourseId(v);
+              setQuizModuleId('');
+              setQuizModules([]);
+              if (v) {
+                api.get(`/courses/${v}/modules`).then(({ data }) => setQuizModules(data)).catch(console.error);
+              }
+            }}
+          >
+            <option value="">Select course</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={quizModuleId}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQuizModuleId(v);
+              loadQuizForModule(v);
+            }}
+          >
+            <option value="">Select unit</option>
+            {quizModules.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.title}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {quizModuleId && (
+          <form className="admin-form" onSubmit={handleSaveQuiz}>
+            <div className="admin-form-column admin-form-wide">
+              <label>Quiz title</label>
+              <input
+                value={quizForm.title}
+                onChange={(e) => setQuizForm({ ...quizForm, title: e.target.value })}
+                required
+              />
+
+              <label>Question</label>
+              <input
+                value={quizForm.question}
+                onChange={(e) => setQuizForm({ ...quizForm, question: e.target.value })}
+                required
+              />
+
+              <label>Option A</label>
+              <input
+                value={quizForm.option_a}
+                onChange={(e) => setQuizForm({ ...quizForm, option_a: e.target.value })}
+                required
+              />
+
+              <label>Option B</label>
+              <input
+                value={quizForm.option_b}
+                onChange={(e) => setQuizForm({ ...quizForm, option_b: e.target.value })}
+                required
+              />
+
+              <label>Option C</label>
+              <input
+                value={quizForm.option_c}
+                onChange={(e) => setQuizForm({ ...quizForm, option_c: e.target.value })}
+              />
+
+              <label>Option D</label>
+              <input
+                value={quizForm.option_d}
+                onChange={(e) => setQuizForm({ ...quizForm, option_d: e.target.value })}
+              />
+
+              <label>Correct answer</label>
+              <select
+                value={quizForm.correct_option}
+                onChange={(e) => setQuizForm({ ...quizForm, correct_option: e.target.value })}
+              >
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+              </select>
+
+              <button type="submit">Save quiz</button>
             </div>
           </form>
         )}
@@ -627,8 +921,13 @@ export default function AdminDashboard() {
       <style>{`
         :root {
           --admin-bg: #f5f5f5;
-          --admin-sidebar: #0f172a;
-          --admin-blue: #1d4ed8;
+          --admin-sidebar: #1f2f45;
+          --admin-sidebar-deep: #17253a;
+          --admin-blue: #003366;
+          --admin-cyan: #22d3ee;
+          --admin-line: #d8dee8;
+          --admin-text: #07152c;
+          --admin-muted: #64748b;
         }
 
         .admin-layout {
@@ -639,58 +938,96 @@ export default function AdminDashboard() {
         }
 
         .admin-sidebar {
-          width: 230px;
+          width: 240px;
           background: var(--admin-sidebar);
-          color: #e5e7eb;
-          padding: 1.6rem 1rem;
+          color: #ffffff;
+          padding: 0;
           display: flex;
           flex-direction: column;
-          gap: 1.5rem;
+          border-right: 1px solid rgba(255,255,255,0.08);
         }
 
         .admin-sidebar h1 {
-          font-size: 1.1rem;
+          font-size: 1rem;
           margin: 0;
+          padding: 1.45rem 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.12);
         }
 
         .admin-menu {
           display: flex;
           flex-direction: column;
-          gap: 0.4rem;
+          gap: 0.2rem;
           font-size: 0.85rem;
+          padding: 1rem 0.7rem;
         }
 
         .admin-menu button {
-          padding: 0.4rem 0.5rem;
-          border-radius: 0.4rem;
+          padding: 0.62rem 0.6rem;
+          border-radius: 0.35rem;
           border: none;
           background: transparent;
-          color: #e5e7eb;
+          color: #ffffff;
           text-align: left;
           cursor: pointer;
+          font-weight: 600;
         }
 
         .admin-menu button.active {
-          background: rgba(59,130,246,0.3);
-          color: #bfdbfe;
+          background: rgba(255,255,255,0.14);
+          color: #ffffff;
+        }
+
+        .admin-menu-label {
+          color: #a8c4e8;
+          font-size: 0.72rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          padding: 1rem 0.6rem 0.25rem;
         }
 
         .admin-main {
           flex: 1;
-          padding: 2rem 1.5rem;
+          min-width: 0;
+        }
+
+        .admin-topbar {
+          height: 62px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 1.7rem;
+          background: #ffffff;
+          border-bottom: 1px solid var(--admin-line);
+        }
+
+        .admin-topbar-title {
+          color: var(--admin-text);
+          font-size: 1rem;
+          font-weight: 800;
+        }
+
+        .admin-role {
+          color: #475569;
+          font-size: 0.8rem;
+        }
+
+        .admin-content {
+          padding: 1.7rem;
         }
 
         .admin-title {
-          font-size: 1.3rem;
-          font-weight: 700;
-          margin-bottom: 1rem;
-          color: #0f172a;
+          font-size: 1.05rem;
+          font-weight: 800;
+          margin: 0 0 0.55rem;
+          color: var(--admin-text);
         }
 
         .admin-sub {
-          font-size: 0.9rem;
-          color: #4b5563;
-          margin-bottom: 1.5rem;
+          font-size: 0.86rem;
+          color: var(--admin-muted);
+          margin: 0 0 1.2rem;
         }
 
         .admin-grid {
@@ -706,9 +1043,10 @@ export default function AdminDashboard() {
 
         .admin-card {
           background: #ffffff;
-          border-radius: 1rem;
+          border-radius: 0.5rem;
           padding: 1.2rem 1.4rem;
-          box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+          border: 1px solid var(--admin-line);
+          box-shadow: none;
         }
 
         .admin-card-wide {
@@ -737,13 +1075,33 @@ export default function AdminDashboard() {
 
         .admin-section {
           background: #ffffff;
-          border-radius: 1.25rem;
-          padding: 1.5rem 1.7rem;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+          border-radius: 0.5rem;
+          padding: 1.5rem;
+          border: 1px solid var(--admin-line);
+          box-shadow: none;
+        }
+
+        .admin-section-head {
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: flex-start;
+          margin-bottom: 1rem;
+        }
+
+        .admin-primary-btn {
+          padding: 0.65rem 1rem;
+          border-radius: 0.35rem;
+          border: none;
+          background: var(--admin-blue);
+          color: white;
+          font-size: 0.85rem;
+          font-weight: 800;
+          cursor: pointer;
         }
 
         .admin-form {
-          margin-bottom: 1rem;
+          margin-bottom: 1.25rem;
         }
 
         .admin-form-row {
@@ -761,20 +1119,98 @@ export default function AdminDashboard() {
 
         .admin-form-row input,
         .admin-form-row select,
-        .admin-form-column input {
-          padding: 0.55rem 0.75rem;
-          border-radius: 0.6rem;
-          border: 1px solid #d1d5db;
+        .admin-form-column input,
+        .admin-form-column select {
+          padding: 0.65rem 0.75rem;
+          border-radius: 0.35rem;
+          border: 1px solid var(--admin-line);
           font-size: 0.85rem;
         }
 
-        .admin-form-row button {
-          padding: 0.55rem 1rem;
-          border-radius: 0.6rem;
+        .admin-form-wide {
+          max-width: 720px;
+        }
+
+        .admin-form-column button {
+          align-self: flex-start;
+          padding: 0.65rem 1rem;
+          border-radius: 0.35rem;
           border: none;
           background: var(--admin-blue);
           color: white;
           font-size: 0.85rem;
+          cursor: pointer;
+        }
+
+        .admin-form-row button {
+          padding: 0.65rem 1rem;
+          border-radius: 0.35rem;
+          border: none;
+          background: var(--admin-blue);
+          color: white;
+          font-size: 0.85rem;
+          cursor: pointer;
+        }
+
+        .admin-course-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 1rem;
+          margin-bottom: 1.35rem;
+        }
+
+        .admin-course-card {
+          border: 1px solid var(--admin-line);
+          border-radius: 0.5rem;
+          background: #f8fbff;
+          padding: 1rem;
+          overflow: hidden;
+        }
+
+        .admin-course-image {
+          width: calc(100% + 2rem);
+          margin: -1rem -1rem 0.8rem;
+          aspect-ratio: 16 / 9;
+          object-fit: cover;
+          background: #e8eef6;
+        }
+
+        .admin-course-category {
+          color: var(--admin-cyan);
+          font-size: 0.72rem;
+          font-weight: 900;
+          text-transform: uppercase;
+          margin-bottom: 0.5rem;
+        }
+
+        .admin-course-card h3 {
+          margin: 0;
+          color: var(--admin-text);
+          font-size: 0.98rem;
+        }
+
+        .admin-course-card p {
+          min-height: 3.4rem;
+          margin: 0.55rem 0 0.9rem;
+          color: var(--admin-muted);
+          line-height: 1.5;
+          font-size: 0.84rem;
+        }
+
+        .admin-course-actions {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+
+        .admin-course-actions button {
+          border: 1px solid rgba(0, 51, 102, 0.18);
+          background: #ffffff;
+          color: var(--admin-blue);
+          border-radius: 999px;
+          padding: 0.45rem 0.75rem;
+          font-size: 0.78rem;
+          font-weight: 800;
           cursor: pointer;
         }
 
@@ -805,6 +1241,78 @@ export default function AdminDashboard() {
           font-size: 0.8rem;
         }
 
+        .admin-table-image {
+          width: 54px;
+          height: 36px;
+          object-fit: cover;
+          border-radius: 0.3rem;
+          border: 1px solid var(--admin-line);
+        }
+
+        .admin-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          background: rgba(7, 21, 44, 0.55);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1rem;
+        }
+
+        .admin-modal {
+          width: min(480px, 100%);
+          background: #ffffff;
+          border: 1px solid var(--admin-line);
+          border-radius: 0.5rem;
+          padding: 1.25rem;
+          display: flex;
+          flex-direction: column;
+          gap: 0.65rem;
+        }
+
+        .admin-modal-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+        }
+
+        .admin-modal-head h3 {
+          margin: 0;
+          color: var(--admin-text);
+          font-size: 1rem;
+        }
+
+        .admin-modal-head button {
+          border: none;
+          background: transparent;
+          color: var(--admin-text);
+          cursor: pointer;
+          font-weight: 900;
+        }
+
+        .admin-modal label {
+          color: var(--admin-muted);
+          font-size: 0.8rem;
+          font-weight: 800;
+        }
+
+        .admin-modal input {
+          padding: 0.65rem 0.75rem;
+          border-radius: 0.35rem;
+          border: 1px solid var(--admin-line);
+          font-size: 0.85rem;
+        }
+
+        .admin-modal-preview {
+          width: 100%;
+          aspect-ratio: 16 / 9;
+          object-fit: cover;
+          border-radius: 0.45rem;
+          border: 1px solid var(--admin-line);
+        }
+
         @media (max-width: 768px) {
           .admin-layout {
             flex-direction: column;
@@ -812,16 +1320,17 @@ export default function AdminDashboard() {
 
           .admin-sidebar {
             width: 100%;
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
+          }
+
+          .admin-course-grid {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
 
       <div className="admin-layout">
         <aside className="admin-sidebar">
-          <h1>Admin Panel</h1>
+          <h1>Stekora Admin</h1>
           <div className="admin-menu">
             <button
               type="button"
@@ -831,6 +1340,7 @@ export default function AdminDashboard() {
               Dashboard
             </button>
 
+            <div className="admin-menu-label">Catalog</div>
             {/* Learn dropdown */}
             <button
               type="button"
@@ -864,6 +1374,13 @@ export default function AdminDashboard() {
                 </button>
                 <button
                   type="button"
+                  className={activeTab === 'quizzes' ? 'active' : ''}
+                  onClick={() => setActiveTab('quizzes')}
+                >
+                  Quizzes
+                </button>
+                <button
+                  type="button"
                   className={activeTab === 'students' ? 'active' : ''}
                   onClick={() => {
                     setActiveTab('students');
@@ -875,6 +1392,7 @@ export default function AdminDashboard() {
               </div>
             )}
 
+            <div className="admin-menu-label">Shop</div>
             <button
               type="button"
               className={activeTab === 'products' ? 'active' : ''}
@@ -883,6 +1401,7 @@ export default function AdminDashboard() {
               Add product
             </button>
 
+            <div className="admin-menu-label">Site</div>
             <button
               type="button"
               className={activeTab === 'settings' ? 'active' : ''}
@@ -904,13 +1423,30 @@ export default function AdminDashboard() {
         </aside>
 
         <main className="admin-main">
-          {activeTab === 'overview' && renderOverview()}
-          {activeTab === 'courses' && renderCourses()}
-          {activeTab === 'modules' && renderModules()}
-          {activeTab === 'materials' && renderMaterials()}
-          {activeTab === 'students' && renderStudents()}
-          {activeTab === 'products' && renderProducts()}
-          {activeTab === 'settings' && renderSettings()}
+          <header className="admin-topbar">
+            <div className="admin-topbar-title">
+              {activeTab === 'overview' && 'Dashboard'}
+              {activeTab === 'courses' && 'Courses'}
+              {activeTab === 'modules' && 'Curriculum'}
+              {activeTab === 'materials' && 'Materials'}
+              {activeTab === 'quizzes' && 'Quizzes'}
+              {activeTab === 'students' && 'Students'}
+              {activeTab === 'products' && 'Products'}
+              {activeTab === 'settings' && 'Settings'}
+            </div>
+            <div className="admin-role">Super Admin</div>
+          </header>
+
+          <div className="admin-content">
+            {activeTab === 'overview' && renderOverview()}
+            {activeTab === 'courses' && renderCourses()}
+            {activeTab === 'modules' && renderModules()}
+            {activeTab === 'materials' && renderMaterials()}
+            {activeTab === 'quizzes' && renderQuizzes()}
+            {activeTab === 'students' && renderStudents()}
+            {activeTab === 'products' && renderProducts()}
+            {activeTab === 'settings' && renderSettings()}
+          </div>
         </main>
       </div>
     </>
