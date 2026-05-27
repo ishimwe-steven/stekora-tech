@@ -41,27 +41,15 @@ export default function StudentDashboard() {
     loadDashboard();
   }, [navigate]);
 
-  const startCourse = async () => {
-    if (!confirmCourse) return;
-    const firstModule = nextModuleFor(confirmCourse);
-    try {
-      setStartingCourse(true);
-      await api.post(`/students/courses/${confirmCourse.id}/start`);
-      setConfirmCourse(null);
-      if (firstModule) {
-        navigate(`/student/course/${confirmCourse.id}/module/${firstModule.id}`);
-        return;
-      }
-      await loadDashboard();
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.msg || 'Failed to start course');
-    } finally {
-      setStartingCourse(false);
-    }
-  };
-
   const allCourses = data?.courses || [];
+
+  const studentName =
+    data?.student?.name ||
+    data?.student?.full_name ||
+    data?.student?.names ||
+    data?.student?.username ||
+    localStorage.getItem('studentName') ||
+    'Student';
 
   const courseGrade = (course) =>
     course.modules_count > 0
@@ -70,6 +58,33 @@ export default function StudentDashboard() {
 
   const nextModuleFor = (course) =>
     course.modules?.find((module) => !module.completed) || course.modules?.[0];
+
+  const hasModules = (course) =>
+    Number(course.modules_count) > 0 || (course.modules && course.modules.length > 0);
+
+  const startCourse = async () => {
+    if (!confirmCourse) return;
+
+    const firstModule = nextModuleFor(confirmCourse);
+
+    try {
+      setStartingCourse(true);
+      await api.post(`/students/courses/${confirmCourse.id}/start`);
+      setConfirmCourse(null);
+
+      if (firstModule) {
+        navigate(`/student/course/${confirmCourse.id}/module/${firstModule.id}`);
+        return;
+      }
+
+      await loadDashboard();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to start course');
+    } finally {
+      setStartingCourse(false);
+    }
+  };
 
   return (
     <>
@@ -81,6 +96,8 @@ export default function StudentDashboard() {
           --line: #d8dee8;
           --cyan: #22d3ee;
           --blue: #3b82f6;
+          --green: #16a34a;
+          --orange: #f59e0b;
           --text-dark: #07152c;
           --text-muted: #64748b;
         }
@@ -95,7 +112,6 @@ export default function StudentDashboard() {
           width: 240px;
           background: var(--sidebar);
           color: #ffffff;
-          padding: 0;
           display: flex;
           flex-direction: column;
           border-right: 1px solid rgba(255,255,255,0.08);
@@ -126,7 +142,6 @@ export default function StudentDashboard() {
 
         .dashboard-menu span.active {
           background: rgba(255,255,255,0.14);
-          color: #ffffff;
         }
 
         .dashboard-main {
@@ -144,6 +159,16 @@ export default function StudentDashboard() {
           border-bottom: 1px solid var(--line);
         }
 
+        .student-welcome {
+          color: var(--text-dark);
+          font-weight: 900;
+        }
+
+        .student-name {
+          color: var(--richblue);
+          font-weight: 900;
+        }
+
         .dashboard-content {
           padding: 1.7rem;
         }
@@ -152,11 +177,6 @@ export default function StudentDashboard() {
           font-size: 0.9rem;
           color: var(--text-muted);
           margin: 0 0 1.5rem;
-        }
-
-        .courses-section {
-          margin: 0;
-          color: var(--richblue);
         }
 
         .courses-title {
@@ -267,22 +287,32 @@ export default function StudentDashboard() {
           font-size: 0.72rem;
         }
 
-        .student-course-start {
+        .student-course-start,
+        .student-course-continue,
+        .student-course-waiting {
           border: none;
           border-radius: 999px;
-          background: var(--blue);
           color: #ffffff;
           cursor: pointer;
           font-size: 0.72rem;
           font-weight: 900;
-          padding: 0.42rem 0.7rem;
+          padding: 0.45rem 0.75rem;
+          text-decoration: none;
+          white-space: nowrap;
         }
 
-        .student-course-open {
-          color: #b8c8e6;
-          text-decoration: none;
-          font-size: 1.45rem;
-          line-height: 1;
+        .student-course-start {
+          background: var(--blue);
+        }
+
+        .student-course-continue {
+          background: var(--green);
+        }
+
+        .student-course-waiting {
+          background: var(--orange);
+          cursor: not-allowed;
+          color: #111827;
         }
 
         .confirm-backdrop {
@@ -366,6 +396,7 @@ export default function StudentDashboard() {
       <div className="dashboard-page">
         <aside className="dashboard-sidebar">
           <h2>Student Account</h2>
+
           <div className="dashboard-menu">
             <span className="active">All Courses</span>
             <span>Profile</span>
@@ -386,8 +417,12 @@ export default function StudentDashboard() {
 
         <main className="dashboard-main">
           <header className="dashboard-topbar">
-            <div style={{ color: 'var(--text-dark)', fontWeight: 800 }}>All Courses</div>
-            <div style={{ color: '#475569', fontSize: '0.8rem' }}>Student Account</div>
+            <div className="student-welcome">
+              Welcome, <span className="student-name">{studentName}</span>
+            </div>
+            <div style={{ color: '#475569', fontSize: '0.8rem' }}>
+              Student Account
+            </div>
           </header>
 
           <div className="dashboard-content">
@@ -397,40 +432,60 @@ export default function StudentDashboard() {
             {data && (
               <section className="courses-section">
                 <h1 className="courses-title">All Courses</h1>
+
                 <div className="student-courses-grid">
                   {allCourses.map((course) => {
                     const grade = courseGrade(course);
                     const nextModule = nextModuleFor(course);
+                    const modulesAvailable = hasModules(course);
+
                     const statusLabel =
-                      course.status === 'completed'
-                        ? 'Completed'
-                        : course.status === 'in_progress'
-                          ? 'In Progress'
-                          : 'Not Started';
+                      !modulesAvailable
+                        ? 'Waiting'
+                        : course.status === 'completed'
+                          ? 'Completed'
+                          : course.status === 'in_progress'
+                            ? 'In Progress'
+                            : 'Not Started';
 
                     return (
                       <article key={course.id} className="student-course-card">
                         <div className="student-course-media">
                           {course.image_url && (
-                            <img src={resolveImageUrl(course.image_url)} alt="" />
+                            <img src={resolveImageUrl(course.image_url)} alt={course.name} />
                           )}
-                          {course.status !== 'not_started' && (
-                            <span className="student-course-badge">{statusLabel}</span>
-                          )}
+
+                          <span className="student-course-badge">
+                            {statusLabel}
+                          </span>
                         </div>
+
                         <div className="student-course-body">
                           <div className="student-course-meta">
                             <span>{course.category || 'Course'}</span>
-                            <span>{course.modules_count} modules</span>
+                            <span>{course.modules_count || 0} modules</span>
                           </div>
+
                           <h2 className="student-course-name">{course.name}</h2>
                         </div>
+
                         <div className="student-course-footer">
                           <div className="student-course-progress" aria-hidden="true">
                             <span style={{ width: `${grade}%` }} />
                           </div>
+
                           <span className="student-course-grade">{grade}%</span>
-                          {course.status === 'not_started' ? (
+
+                          {!modulesAvailable ? (
+                            <button
+                              type="button"
+                              className="student-course-waiting"
+                              disabled
+                              title="Wait admin to upload the module"
+                            >
+                              Waiting
+                            </button>
+                          ) : course.status === 'not_started' ? (
                             <button
                               type="button"
                               className="student-course-start"
@@ -442,10 +497,9 @@ export default function StudentDashboard() {
                             nextModule && (
                               <Link
                                 to={`/student/course/${course.id}/module/${nextModule.id}`}
-                                className="student-course-open"
-                                aria-label={`Open ${course.name}`}
+                                className="student-course-continue"
                               >
-                                &rsaquo;
+                                Continue
                               </Link>
                             )
                           )}
@@ -454,6 +508,7 @@ export default function StudentDashboard() {
                     );
                   })}
                 </div>
+
                 {allCourses.length === 0 && (
                   <p className="dashboard-sub">No courses have been posted yet.</p>
                 )}
@@ -464,17 +519,38 @@ export default function StudentDashboard() {
       </div>
 
       {confirmCourse && (
-        <div className="confirm-backdrop" role="presentation" onClick={() => setConfirmCourse(null)}>
-          <div className="confirm-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="confirm-backdrop"
+          role="presentation"
+          onClick={() => setConfirmCourse(null)}
+        >
+          <div
+            className="confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2>Start this course?</h2>
+
             <p className="dashboard-sub" style={{ marginBottom: 0 }}>
               Do you want to start {confirmCourse.name}? It will be marked in progress on your account.
             </p>
+
             <div className="confirm-actions">
-              <button type="button" className="confirm-cancel" onClick={() => setConfirmCourse(null)}>
+              <button
+                type="button"
+                className="confirm-cancel"
+                onClick={() => setConfirmCourse(null)}
+              >
                 Cancel
               </button>
-              <button type="button" className="confirm-start" onClick={startCourse} disabled={startingCourse}>
+
+              <button
+                type="button"
+                className="confirm-start"
+                onClick={startCourse}
+                disabled={startingCourse}
+              >
                 {startingCourse ? 'Starting...' : 'Confirm'}
               </button>
             </div>

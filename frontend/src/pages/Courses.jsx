@@ -5,35 +5,8 @@ import backendImg from '../assets/image/backend.png';
 import iotImg from '../assets/image/iot.jpg';
 import photoshopImg from '../assets/image/photoshop.jpg';
 
-const FALLBACK_COURSES = [
-  {
-    id: 'full-stack',
-    name: 'Full-Stack Web Development',
-    description:
-      'Learn how to build complete web applications, from user interfaces to APIs, databases, and deployment.',
-  },
-  {
-    id: 'frontend-react',
-    name: 'Frontend with React',
-    description:
-      'Build responsive, modern user interfaces with React, components, routing, state, and API integration.',
-  },
-  {
-    id: 'backend-node',
-    name: 'Backend with Node.js & APIs',
-    description:
-      'Create secure backend systems with Node.js, Express, REST APIs, authentication, and database logic.',
-  },
-  {
-    id: 'iot-basics',
-    name: 'Embedded Systems & IoT Basics',
-    description:
-      'Explore connected devices, sensors, embedded programming, and the fundamentals of IoT projects.',
-  },
-];
-
+const FALLBACK_COURSES = [];
 const COURSE_IMAGES = [fullstackImg, backendImg, iotImg, photoshopImg];
-const CATEGORIES = ['All', 'Development', 'Backend', 'IoT', 'Design'];
 
 const resolveImageUrl = (url) => {
   if (!url) return '';
@@ -42,31 +15,8 @@ const resolveImageUrl = (url) => {
   return `${base}${url}`;
 };
 
-const inferCategory = (course) => {
-  if (course.category) return course.category;
-  const text = `${course.name || ''} ${course.description || ''}`.toLowerCase();
-  if (text.includes('iot') || text.includes('embedded')) return 'IoT';
-  if (text.includes('backend') || text.includes('api') || text.includes('node')) return 'Backend';
-  if (text.includes('design') || text.includes('photo') || text.includes('ui')) return 'Design';
-  return 'Development';
-};
-
-const buildFallbackCurriculum = (course) => {
-  const category = inferCategory(course);
-
-  if (category === 'Backend') {
-    return ['Node.js and Express basics', 'REST API structure', 'Database connections', 'Authentication and security'];
-  }
-
-  if (category === 'IoT') {
-    return ['Embedded systems introduction', 'Sensors and inputs', 'Device communication', 'IoT project build'];
-  }
-
-  if (category === 'Design') {
-    return ['Design tool basics', 'Layouts and visual hierarchy', 'Responsive interface design', 'Portfolio project'];
-  }
-
-  return ['HTML, CSS and JavaScript foundations', 'React components and routing', 'Backend API integration', 'Final full-stack project'];
+const getCourseCategory = (course) => {
+  return course.category?.trim() || 'Uncategorized';
 };
 
 export default function Courses() {
@@ -94,12 +44,11 @@ export default function Courses() {
   }, []);
 
   useEffect(() => {
-    if (!selectedCourse) return undefined;
+    if (!selectedCourse) return;
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
-        setSelectedCourse(null);
-        setCurriculum([]);
+        closeCourseModal();
       }
     };
 
@@ -111,11 +60,21 @@ export default function Courses() {
     () =>
       courses.map((course, index) => ({
         ...course,
-        category: inferCategory(course),
-        image: resolveImageUrl(course.image_url) || COURSE_IMAGES[index % COURSE_IMAGES.length],
+        category: getCourseCategory(course),
+        image:
+          resolveImageUrl(course.image_url) ||
+          COURSE_IMAGES[index % COURSE_IMAGES.length],
       })),
     [courses]
   );
+
+  const categories = useMemo(() => {
+    const uniqueCategories = [
+      ...new Set(decoratedCourses.map((course) => course.category)),
+    ];
+
+    return ['All', ...uniqueCategories];
+  }, [decoratedCourses]);
 
   const visibleCourses = decoratedCourses.filter(
     (course) => activeCategory === 'All' || course.category === activeCategory
@@ -129,10 +88,10 @@ export default function Courses() {
     try {
       const { data } = await api.get(`/courses/${course.id}/modules`);
       const units = data.map((module) => module.title).filter(Boolean);
-      setCurriculum(units.length ? units : buildFallbackCurriculum(course));
+      setCurriculum(units);
     } catch (err) {
       console.error(err);
-      setCurriculum(buildFallbackCurriculum(course));
+      setCurriculum([]);
     } finally {
       setCurriculumLoading(false);
     }
@@ -148,6 +107,7 @@ export default function Courses() {
       <style>{`
         :root {
           --blue: #3b82f6;
+          --richblue: #003366;
         }
 
         .courses-page {
@@ -178,9 +138,9 @@ export default function Courses() {
           min-height: 44px;
           padding: 0 1.2rem;
           font-size: 0.96rem;
-          font-weight: 500;
+          font-weight: 600;
           cursor: pointer;
-          transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+          transition: 0.2s ease;
         }
 
         .course-tab:hover {
@@ -226,8 +186,7 @@ export default function Courses() {
         .course-category {
           color: #22d3ee;
           font-size: 0.82rem;
-          font-weight: 700;
-          letter-spacing: 0.02em;
+          font-weight: 800;
           text-transform: uppercase;
           margin-bottom: 1rem;
         }
@@ -270,14 +229,20 @@ export default function Courses() {
           cursor: pointer;
           padding: 0.65rem 1rem;
           min-width: 112px;
-          transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
         }
 
         .course-learn:hover {
           background: var(--richblue);
           border-color: #22d3ee;
-          color: #ffffff;
-          transform: translateY(-1px);
+        }
+
+        .course-empty {
+          grid-column: 1 / -1;
+          color: #526175;
+          background: #ffffff;
+          border: 1px solid rgba(0, 51, 102, 0.14);
+          border-radius: 12px;
+          padding: 1.2rem;
         }
 
         .course-modal-backdrop {
@@ -296,7 +261,6 @@ export default function Courses() {
           max-height: min(86vh, 760px);
           overflow: auto;
           background: #ffffff;
-          border: 1px solid rgba(34, 211, 238, 0.35);
           border-radius: 8px;
           box-shadow: 0 24px 60px rgba(0, 31, 63, 0.28);
         }
@@ -310,7 +274,6 @@ export default function Courses() {
           color: #22d3ee;
           font-size: 0.75rem;
           font-weight: 800;
-          letter-spacing: 0.04em;
           text-transform: uppercase;
           margin-bottom: 0.35rem;
         }
@@ -318,7 +281,6 @@ export default function Courses() {
         .course-modal-title-row {
           display: flex;
           gap: 1rem;
-          align-items: flex-start;
           justify-content: space-between;
         }
 
@@ -326,7 +288,6 @@ export default function Courses() {
           margin: 0;
           color: #001f3f;
           font-size: 1.55rem;
-          line-height: 1.22;
         }
 
         .course-modal-close {
@@ -337,14 +298,11 @@ export default function Courses() {
           height: 36px;
           border-radius: 999px;
           font-size: 1.25rem;
-          line-height: 1;
           cursor: pointer;
-          flex: 0 0 auto;
         }
 
         .course-modal-meta {
           display: flex;
-          flex-wrap: wrap;
           gap: 0.8rem;
           margin-top: 0.75rem;
           color: #526175;
@@ -386,15 +344,6 @@ export default function Courses() {
           font-size: 0.92rem;
         }
 
-        .course-empty {
-          grid-column: 1 / -1;
-          color: #526175;
-          background: #ffffff;
-          border: 1px solid rgba(0, 51, 102, 0.14);
-          border-radius: 12px;
-          padding: 1.2rem;
-        }
-
         @media (max-width: 1020px) {
           .courses-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -422,10 +371,6 @@ export default function Courses() {
             height: 210px;
           }
 
-          .course-modal {
-            max-height: 90vh;
-          }
-
           .course-modal h2 {
             font-size: 1.25rem;
           }
@@ -434,8 +379,8 @@ export default function Courses() {
 
       <div className="courses-page">
         <div className="courses-container">
-          <div className="course-tabs" aria-label="Course categories">
-            {CATEGORIES.map((category) => (
+          <div className="course-tabs">
+            {categories.map((category) => (
               <button
                 key={category}
                 type="button"
@@ -453,16 +398,25 @@ export default function Courses() {
             {!loading &&
               visibleCourses.map((course) => (
                 <article key={course.id} className="course-card">
-                  <img className="course-image" src={course.image} alt="" />
+                  <img className="course-image" src={course.image} alt={course.name} />
+
                   <div className="course-body">
                     <div className="course-category">{course.category}</div>
+
                     <h2 className="course-title">{course.name}</h2>
+
                     <p className="course-summary">
-                      {(course.description || 'A practical Stekora Tech course built around real learning units.').slice(0, 118)}
+                      {(course.description ||
+                        'A practical Stekora Tech course built around real learning units.'
+                      ).slice(0, 118)}
                       {(course.description || '').length > 118 ? '...' : ''}
                     </p>
+
                     <div className="course-footer">
-                      <span className="course-count">{buildFallbackCurriculum(course).length * 10}</span>
+                      <span className="course-count">
+                        {course.modules_count || course.module_count || 0} Lessons
+                      </span>
+
                       <button
                         type="button"
                         className="course-learn"
@@ -481,34 +435,30 @@ export default function Courses() {
           </div>
 
           {selectedCourse && (
-            <div
-              className="course-modal-backdrop"
-              role="presentation"
-              onClick={closeCourseModal}
-            >
+            <div className="course-modal-backdrop" onClick={closeCourseModal}>
               <section
                 className="course-modal"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="course-modal-title"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="course-modal-top">
-                  <div className="course-modal-kicker">{selectedCourse.category}</div>
+                  <div className="course-modal-kicker">
+                    {selectedCourse.category}
+                  </div>
+
                   <div className="course-modal-title-row">
-                    <h2 id="course-modal-title">{selectedCourse.name}</h2>
+                    <h2>{selectedCourse.name}</h2>
+
                     <button
                       type="button"
                       className="course-modal-close"
-                      aria-label="Close course details"
                       onClick={closeCourseModal}
                     >
                       &times;
                     </button>
                   </div>
+
                   <div className="course-modal-meta">
-                    <span>{buildFallbackCurriculum(selectedCourse).length * 10}</span>
-                    <span>Lessons</span>
+                    <span>{curriculum.length} Lessons</span>
                     <span>Free</span>
                   </div>
                 </div>
@@ -524,14 +474,17 @@ export default function Courses() {
 
                   <div className="course-modal-section">
                     <h3>Curriculum</h3>
+
                     {curriculumLoading ? (
                       <p>Loading curriculum...</p>
-                    ) : (
+                    ) : curriculum.length > 0 ? (
                       <ul className="curriculum-list">
                         {curriculum.map((unit, index) => (
                           <li key={`${unit}-${index}`}>{unit}</li>
                         ))}
                       </ul>
+                    ) : (
+                      <p>No module has been uploaded for this course yet.</p>
                     )}
                   </div>
                 </div>
