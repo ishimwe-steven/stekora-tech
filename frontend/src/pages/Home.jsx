@@ -47,6 +47,7 @@ export default function Home() {
           --lightgray: #9ca3af;
           --cyan: #22d3ee;
           --indigo: #6366f1;
+          --blue: #3b82f6;
         }
 
         body {
@@ -147,7 +148,7 @@ export default function Home() {
         
         
           .ad-slider {
-           height: 100%;
+           height: 110px;
            width: 100%;
            
          }
@@ -192,7 +193,7 @@ export default function Home() {
 
         @media(min-width: 768px) {
           .ad-slider {
-           height: 100%;
+           height: 110px;
            width: 100%;
            
          }
@@ -214,7 +215,6 @@ export default function Home() {
           width: 6px;
           height: 6px;
          }
-          }
 
           .hero-section {
             grid-template-columns: repeat(2,1fr);
@@ -239,6 +239,25 @@ export default function Home() {
         .hero-description {
           margin-top: 0.75rem;
           font-size: 0.95rem;
+        }
+
+        .home-contact-btn {
+          display: inline-block;
+          background:  var(--blue);
+          
+          color: #ffffff;
+          font-weight: 500;
+          padding: 0.75rem 2rem;
+          border-radius: 0.5rem;
+          text-decoration: none;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.12);
+          transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        .home-contact-btn:hover {
+          background: var(--richblue);
+          box-shadow: 0 10px 15px rgba(0, 0, 0, 0.14);
+          transform: translateY(-1px);
         }
 
         .gradient-text {
@@ -297,7 +316,7 @@ export default function Home() {
 
         @media(min-width:640px){
          .ad-slider {
-           height: 100%;
+           height: 150px;
            width: 100%;
            
          }
@@ -319,7 +338,7 @@ export default function Home() {
           width: 6px;
           height: 6px;
          }
-          }
+
           .products-grid{
             grid-template-columns:repeat(2,1fr);
           }
@@ -416,7 +435,7 @@ export default function Home() {
             <div className="pt-4">
               <a
                 href="/contact"
-                className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-8 rounded-lg transition shadow-md hover:shadow-lg"
+                className="home-contact-btn"
               >
                 Get in Touch
               </a>

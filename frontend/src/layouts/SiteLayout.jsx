@@ -16,6 +16,11 @@ export default function SiteLayout() {
       {/* Internal CSS */}
       <style>
         {`
+          :root {
+            --blue: #3b82f6;
+            --richgreen: #006400;
+          }
+
           .site-layout {
             min-height: 100vh;
             display: flex;
@@ -50,9 +55,14 @@ export default function SiteLayout() {
             font-size: 0.8rem;
             font-weight: 600;
             color: #fff;
-            background-color: #4f46e5;
+            background: var(--blue);
             box-shadow: 0 8px 18px rgba(0,0,0,0.16);
             white-space: nowrap;
+          }
+          .fab-button:hover {
+            background: var(--richblue);
+            color: #ffffff;
+            transform: translateY(-2px);
           }
 
           .fab-button span.icon {
@@ -67,7 +77,12 @@ export default function SiteLayout() {
           }
 
           .fab-button.secondary {
-            background-color: #4f46e5;
+            background: var(--blue);
+          }
+           .fab-button.secondary:hover {
+            background: var(--richblue);
+            color: #ffffff;
+            transform: translateY(-2px);
           }
 
           .fab-button.whatsapp {
@@ -77,6 +92,11 @@ export default function SiteLayout() {
             border-radius: 50%;
             justify-content: center;
             background: #25d366;
+          }
+          .fab-button.whatsapp:hover {
+            background: var(--richgreen);
+            color: #ffffff;
+            transform: translateY(-2px);
           }
 
           .fab-button.whatsapp span.icon {

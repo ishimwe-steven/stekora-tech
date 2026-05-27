@@ -6,7 +6,7 @@ export default function Shop() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState(''); // ✅ NEW
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     async function loadProducts() {
@@ -31,7 +31,6 @@ export default function Shop() {
     loadProducts();
   }, []);
 
-  // ✅ FILTER PRODUCTS AS USER TYPES
   const filteredProducts = products.filter((product) =>
     product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.description?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -39,14 +38,12 @@ export default function Shop() {
 
   return (
     <>
-      {/* Internal CSS */}
       <style>
         {`
           :root {
             --richblue: #003366;
             --palegray: #f5f5f5;
             --lightgray: #9ca3af;
-            --yellow: #facc15;
           }
 
           body {
@@ -63,51 +60,27 @@ export default function Shop() {
             padding: 2.5rem 1rem;
           }
 
-          h1 {
+          .shop-title {
             font-size: 2rem;
             font-weight: 700;
-            margin-bottom: 1.5rem;
-          }
-
-          /* SEARCH BAR WRAPPER */
-          .shop-search-row {
-            background: #111827;
-            padding: 1rem;
-            border-radius: 999px;
-            display: flex;
-            align-items: center;
-            max-width: 520px;
-            margin-bottom: 2rem;
+            margin: 0 0 1rem;
           }
 
           .shop-search-input {
-            flex: 1;
-            padding: 0.6rem 0.9rem;
-            border-radius: 999px 0 0 999px;
-            border: 1px solid #4b5563;
-            background: transparent;
-            color: #e5e7eb;
-            font-size: 0.9rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--lightgray);
+            background: #ffffff;
+            color: var(--richblue);
+            font-size: 0.85rem;
             outline: none;
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 2rem;
           }
 
-          .shop-search-input::placeholder {
-            color: #9ca3af;
-          }
-
-          .shop-search-button {
-            width: 46px;
-            height: 46px;
-            border-radius: 50%;
-            border: none;
-            margin-left: 0.5rem;
-            background: #f59e0b;
-            color: #111827;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.1rem;
-            cursor: pointer;
+          .shop-search-input:focus {
+            border-color: var(--richblue);
           }
 
           .products-grid {
@@ -134,38 +107,68 @@ export default function Shop() {
             text-align: center;
             margin-top: 2rem;
           }
+
+          .shop-empty-panel {
+            background: #dfe4ea;
+            border: 1px dashed var(--richblue);
+            border-radius: 0.75rem;
+            padding: 2rem;
+            color: var(--richblue);
+            margin-top: 0.25rem;
+          }
+
+          .shop-empty-panel h2 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0 0 0.6rem;
+          }
+
+          .shop-empty-panel p {
+            color: var(--lightgray);
+            font-size: 0.95rem;
+            margin: 0;
+          }
+
+          .shop-empty-contact {
+            color: var(--richblue);
+            display: inline-block;
+            font-size: 0.9rem;
+            margin-top: 1.25rem;
+          }
+
+          .shop-no-results {
+            font-size: 0.9rem;
+            color: var(--lightgray);
+            margin-top: 1rem;
+          }
+
+          @media(max-width: 480px) {
+            .shop-empty-panel {
+              padding: 1.5rem;
+            }
+
+            .shop-search-input {
+              max-width: 100%;
+            }
+          }
         `}
       </style>
 
-      {/* Shop JSX */}
       <div className="shop-container">
-        <h1>Shop</h1>
+        <h1 className="shop-title">Shop</h1>
 
-        {/* 🔍 SEARCH BAR */}
-        <div className="shop-search-row">
-          <input
-            type="text"
-            className="shop-search-input"
-            placeholder="Search For Product......"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button
-            type="button"
-            className="shop-search-button"
-            aria-label="Search"
-          >
-            🔍
-          </button>
-        </div>
+        <input
+          type="text"
+          className="shop-search-input"
+          placeholder="Search products..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
 
-        {/* Loading */}
-        {loading && <p className="status-text">Loading products…</p>}
+        {loading && <p className="status-text">Loading products...</p>}
 
-        {/* Error */}
         {error && <p className="status-text">{error}</p>}
 
-        {/* Products */}
         {!loading && !error && filteredProducts.length > 0 && (
           <div className="products-grid">
             {filteredProducts.map((p) => (
@@ -174,10 +177,19 @@ export default function Shop() {
           </div>
         )}
 
-        {/* No Results */}
-        {!loading && !error && filteredProducts.length === 0 && (
-          <p className="status-text">
-            No products found for "<span style={{ color: '#facc15' }}>{searchTerm}</span>"
+        {!loading && !error && products.length === 0 && (
+          <div className="shop-empty-panel">
+            <h2>No product posted yet</h2>
+            <p>
+              We're preparing products and services for the shop. Please check back soon.
+            </p>
+            <span className="shop-empty-contact">Email: info@stekoratech.com</span>
+          </div>
+        )}
+
+        {!loading && !error && products.length > 0 && filteredProducts.length === 0 && (
+          <p className="shop-no-results">
+            No matching products found for "<span style={{ color: '#003366' }}>{searchTerm}</span>"
           </p>
         )}
       </div>

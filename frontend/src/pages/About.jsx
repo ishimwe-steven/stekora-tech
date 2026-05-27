@@ -179,8 +179,7 @@ export default function About() {
               <h3>Our Mission</h3>
               <p>
                 To solve business challenges with innovative software, embedded
-                systems and research while empowering young talent through real
-                projects and mentorship.
+                systems and research while empowering young talent through practical innovation and mentorship.
               </p>
             </div>
             <div className="about-box">

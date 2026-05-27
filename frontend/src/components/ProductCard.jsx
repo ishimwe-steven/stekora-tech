@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function ProductCard({ product }) {
   const IMAGE_BASE_URL = 'http://localhost:5000';
   const price = Number(product.price) || 0;
-  const oldPrice = price ? (price * 1.5).toFixed(2) : '';
+  const oldPrice = Number(product.old_price) || 0;
+  const discountPercent = Number(product.discount_percent) || 0;
+  const details = product.details || product.description || 'More information will be added soon.';
+  const imageSrc = product.image ? `${IMAGE_BASE_URL}${product.image}` : '/placeholder.png';
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   return (
     <>
@@ -25,6 +29,7 @@ export default function ProductCard({ product }) {
           justify-content: space-between;
           align-items: flex-start;
           margin-bottom: 0.5rem;
+          min-height: 1.9rem;
         }
 
         .shop-card-ribbon {
@@ -45,6 +50,7 @@ export default function ProductCard({ product }) {
           padding: 0.15rem 0.5rem;
           font-size: 0.7rem;
           color: #92400e;
+          margin-left: auto;
         }
 
         .shop-card-heart {
@@ -108,6 +114,10 @@ export default function ProductCard({ product }) {
           font-size: 0.8rem;
           color: #ef4444;
           text-decoration: none;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          padding: 0;
         }
 
         .shop-card-link:hover {
@@ -139,24 +149,98 @@ export default function ProductCard({ product }) {
           font-size: 0.85rem;
         }
 
+        .product-modal-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.58);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1rem;
+          z-index: 50;
+        }
+
+        .product-modal {
+          width: min(560px, 100%);
+          background: #ffffff;
+          border-radius: 12px;
+          box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+          color: #111827;
+          overflow: hidden;
+        }
+
+        .product-modal-image {
+          width: 100%;
+          height: 240px;
+          object-fit: contain;
+          background: #f8fafc;
+        }
+
+        .product-modal-body {
+          padding: 1.2rem;
+        }
+
+        .product-modal-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 1rem;
+          align-items: flex-start;
+          margin-bottom: 0.7rem;
+        }
+
+        .product-modal-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          margin: 0;
+          color: #003366;
+        }
+
+        .product-modal-close {
+          border: 1px solid #d1d5db;
+          background: #ffffff;
+          color: #111827;
+          border-radius: 999px;
+          width: 32px;
+          height: 32px;
+          cursor: pointer;
+          line-height: 1;
+        }
+
+        .product-modal-details {
+          color: #4b5563;
+          font-size: 0.92rem;
+          line-height: 1.6;
+          white-space: pre-wrap;
+          margin: 0 0 1rem;
+        }
+
+        .product-modal-price {
+          color: #ef4444;
+          font-weight: 800;
+        }
+
         @media (max-width: 480px) {
           .shop-card-image {
             height: 150px;
+          }
+
+          .product-modal-image {
+            height: 190px;
           }
         }
       `}</style>
 
       <div className="shop-card">
         <div className="shop-card-header">
-          <span className="shop-card-ribbon">56% Off</span>
-          <span className="shop-card-rating">
-            ⭐ 4.4
-          </span>
+          {discountPercent > 0 && (
+            <span className="shop-card-ribbon">{discountPercent}% Off</span>
+          )}
+          <span className="shop-card-rating">Star 4.4</span>
         </div>
         <span className="shop-card-heart">♡</span>
 
         <img
-          src={`${IMAGE_BASE_URL}${product.image}`}
+          src={imageSrc}
           alt={product.name}
           className="shop-card-image"
           onError={(e) => {
@@ -165,28 +249,73 @@ export default function ProductCard({ product }) {
         />
 
         <h3 className="shop-card-title">{product.name}</h3>
-        <p className="shop-card-spec">
-          {product.description}
-        </p>
+        <p className="shop-card-spec">{product.description}</p>
 
         <div className="shop-card-price-row">
           <span className="shop-card-price-label">Price:</span>
           <span className="shop-card-price">RWF {price.toFixed(2)}</span>
-          {oldPrice && (
-            <span className="shop-card-old-price">RWF {oldPrice}</span>
+          {oldPrice > 0 && (
+            <span className="shop-card-old-price">RWF {oldPrice.toFixed(2)}</span>
           )}
         </div>
 
         <div className="shop-card-footer">
-          <a href="#" className="shop-card-link">
+          <button
+            type="button"
+            className="shop-card-link"
+            onClick={() => setDetailsOpen(true)}
+          >
             View Details
-          </a>
+          </button>
           <button type="button" className="shop-card-buy">
             Buy Now
-            <span className="shop-card-buy-icon">🛒</span>
+            <span className="shop-card-buy-icon">Cart</span>
           </button>
         </div>
       </div>
+
+      {detailsOpen && (
+        <div className="product-modal-backdrop" onClick={() => setDetailsOpen(false)}>
+          <div
+            className="product-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`product-title-${product.id}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={imageSrc}
+              alt={product.name}
+              className="product-modal-image"
+              onError={(e) => {
+                e.target.src = '/placeholder.png';
+              }}
+            />
+            <div className="product-modal-body">
+              <div className="product-modal-header">
+                <h2 className="product-modal-title" id={`product-title-${product.id}`}>
+                  {product.name}
+                </h2>
+                <button
+                  type="button"
+                  className="product-modal-close"
+                  aria-label="Close product details"
+                  onClick={() => setDetailsOpen(false)}
+                >
+                  X
+                </button>
+              </div>
+              <p className="product-modal-details">{details}</p>
+              <div>
+                Price: <span className="product-modal-price">RWF {price.toFixed(2)}</span>
+                {oldPrice > 0 && (
+                  <span className="shop-card-old-price">RWF {oldPrice.toFixed(2)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -46,17 +46,22 @@ async function ensureLearningTables() {
   `);
 }
 
-async function ensureCourseImageColumn() {
+async function ensureCourseColumns() {
   const [columns] = await pool.query(
     `SELECT COLUMN_NAME
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
        AND TABLE_NAME = 'courses'
-       AND COLUMN_NAME = 'image_url'`
+       AND COLUMN_NAME IN ('image_url', 'category')`
   );
+  const existing = new Set(columns.map((column) => column.COLUMN_NAME));
 
-  if (columns.length === 0) {
+  if (!existing.has('image_url')) {
     await pool.query('ALTER TABLE courses ADD COLUMN image_url VARCHAR(500) NULL');
+  }
+
+  if (!existing.has('category')) {
+    await pool.query("ALTER TABLE courses ADD COLUMN category VARCHAR(80) NULL DEFAULT 'Development'");
   }
 }
 
@@ -67,9 +72,9 @@ async function ensureCourseImageColumn() {
 // GET /api/courses
 router.get('/', async (req, res) => {
   try {
-    await ensureCourseImageColumn();
+    await ensureCourseColumns();
     const [rows] = await pool.query(
-      'SELECT id, name, description, image_url FROM courses ORDER BY id ASC'
+      'SELECT id, name, description, category, image_url FROM courses ORDER BY id ASC'
     );
     res.json(rows);
   } catch (err) {
@@ -80,18 +85,18 @@ router.get('/', async (req, res) => {
 
 // POST /api/courses  (admin)
 router.post('/', auth, upload.single('image'), async (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, category } = req.body;
   if (!name) return res.status(400).json({ msg: 'Name is required' });
 
   try {
-    await ensureCourseImageColumn();
+    await ensureCourseColumns();
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
     const [result] = await pool.query(
-      'INSERT INTO courses (name, description, image_url) VALUES (?, ?, ?)',
-      [name, description || null, imageUrl]
+      'INSERT INTO courses (name, description, category, image_url) VALUES (?, ?, ?, ?)',
+      [name, description || null, category || 'Development', imageUrl]
     );
     const [[course]] = await pool.query(
-      'SELECT id, name, description, image_url FROM courses WHERE id = ?',
+      'SELECT id, name, description, category, image_url FROM courses WHERE id = ?',
       [result.insertId]
     );
     res.status(201).json(course);
@@ -104,17 +109,17 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 // PUT /api/courses/:id (admin)
 router.put('/:id', auth, upload.single('image'), async (req, res) => {
   const { id } = req.params;
-  const { name, description } = req.body;
+  const { name, description, category } = req.body;
 
   try {
-    await ensureCourseImageColumn();
+    await ensureCourseColumns();
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image_url || null;
     await pool.query(
-      'UPDATE courses SET name = ?, description = ?, image_url = COALESCE(?, image_url) WHERE id = ?',
-      [name, description || null, imageUrl, id]
+      'UPDATE courses SET name = ?, description = ?, category = ?, image_url = COALESCE(?, image_url) WHERE id = ?',
+      [name, description || null, category || 'Development', imageUrl, id]
     );
     const [[course]] = await pool.query(
-      'SELECT id, name, description, image_url FROM courses WHERE id = ?',
+      'SELECT id, name, description, category, image_url FROM courses WHERE id = ?',
       [id]
     );
     res.json(course);

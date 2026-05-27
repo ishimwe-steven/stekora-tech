@@ -43,6 +43,7 @@ const resolveImageUrl = (url) => {
 };
 
 const inferCategory = (course) => {
+  if (course.category) return course.category;
   const text = `${course.name || ''} ${course.description || ''}`.toLowerCase();
   if (text.includes('iot') || text.includes('embedded')) return 'IoT';
   if (text.includes('backend') || text.includes('api') || text.includes('node')) return 'Backend';
@@ -145,6 +146,10 @@ export default function Courses() {
   return (
     <>
       <style>{`
+        :root {
+          --blue: #3b82f6;
+        }
+
         .courses-page {
           min-height: 100vh;
           background: #f5f5f5;
@@ -256,8 +261,8 @@ export default function Courses() {
         }
 
         .course-learn {
-          border: 1px solid #003366;
-          background: #003366;
+          border: 1px solid var(--blue);
+          background: var(--blue);
           color: #ffffff;
           border-radius: 999px;
           font-size: 0.9rem;
@@ -269,9 +274,9 @@ export default function Courses() {
         }
 
         .course-learn:hover {
-          background: #22d3ee;
+          background: var(--richblue);
           border-color: #22d3ee;
-          color: #001f3f;
+          color: #ffffff;
           transform: translateY(-1px);
         }
 

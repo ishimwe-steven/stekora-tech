@@ -1,44 +1,44 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import SiteLayout from './layouts/SiteLayout';
 import Home from './pages/Home';
-import Shop from './pages/Shop';
-import Services from './pages/Services';
-import Jobs from './pages/Jobs';
-import ApplyServices from './pages/ApplyServices';
-import Courses from './pages/Courses';
-import UserLogin from './pages/UserLogin';
-import UserRegister from './pages/UserRegister';
-import About from './pages/About';
-import StudentDashboard from './pages/StudentDashboard';
-import StudentModuleView from './pages/StudentModuleView';
-import AdminLogin from './pages/AdminLogin';
-import RegisterAdmin from './pages/RegisterAdmin';
-import AdminDashboard from './pages/AdminDashboard';
-import Contact from './pages/Contact';
 
+const Shop = lazy(() => import('./pages/Shop'));
+const Services = lazy(() => import('./pages/Services'));
+const Jobs = lazy(() => import('./pages/Jobs'));
+const Courses = lazy(() => import('./pages/Courses'));
+const UserLogin = lazy(() => import('./pages/UserLogin'));
+const UserRegister = lazy(() => import('./pages/UserRegister'));
+const About = lazy(() => import('./pages/About'));
+const StudentDashboard = lazy(() => import('./pages/StudentDashboard'));
+const StudentModuleView = lazy(() => import('./pages/StudentModuleView'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const RegisterAdmin = lazy(() => import('./pages/RegisterAdmin'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const Contact = lazy(() => import('./pages/Contact'));
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<SiteLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/shop" element={<Shop />} />
-        <Route path="/services" element={<Services />} />
-        <Route path="/jobs" element={<Jobs />} />
-        <Route path="/apply-services" element={<Contact />} />
-        <Route path="/study" element={<Courses />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/contact" element={<Contact />} />
-      </Route>
-      <Route path="/login" element={<UserLogin />} />
-      <Route path="/register" element={<UserRegister />} />
-      <Route path="/student/dashboard" element={<StudentDashboard />} />
-      <Route path="/student/course/:courseId/module/:moduleId" element={<StudentModuleView />} />
-      <Route path="/admin/login" element={<AdminLogin />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/admin/register" element={<RegisterAdmin />} />
-       
-    </Routes>
+    <Suspense fallback={<div style={{ padding: '2rem', color: '#003366' }}>Loading...</div>}>
+      <Routes>
+        <Route element={<SiteLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/services" element={<Services />} />
+          <Route path="/jobs" element={<Jobs />} />
+          <Route path="/apply-services" element={<Contact />} />
+          <Route path="/study" element={<Courses />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+        </Route>
+        <Route path="/login" element={<UserLogin />} />
+        <Route path="/register" element={<UserRegister />} />
+        <Route path="/student/dashboard" element={<StudentDashboard />} />
+        <Route path="/student/course/:courseId/module/:moduleId" element={<StudentModuleView />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/register" element={<RegisterAdmin />} />
+      </Routes>
+    </Suspense>
   );
 }

@@ -4,6 +4,7 @@ import api from '../services/api';
 import ProductForm from './ProductForm';
 
 const inferCourseCategory = (course) => {
+  if (course.category) return course.category;
   const text = `${course.name || ''} ${course.description || ''}`.toLowerCase();
   if (text.includes('iot') || text.includes('embedded')) return 'IoT';
   if (text.includes('backend') || text.includes('api') || text.includes('node')) return 'Backend';
@@ -11,12 +12,20 @@ const inferCourseCategory = (course) => {
   return 'Development';
 };
 
+const COURSE_CATEGORIES = ['Development', 'Backend', 'IoT', 'Design'];
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview'); // overview | courses | modules | materials | quizzes | students | products | settings
   const [overview, setOverview] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [courseForm, setCourseForm] = useState({ id: null, name: '', description: '', image_url: '' });
+  const [courseForm, setCourseForm] = useState({
+    id: null,
+    name: '',
+    description: '',
+    category: 'Development',
+    image_url: '',
+  });
   const [courseImage, setCourseImage] = useState(null);
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [selectedCourseForModules, setSelectedCourseForModules] = useState('');
@@ -30,7 +39,14 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState([]);
   const [products, setProducts] = useState([]);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [productModalOpen, setProductModalOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [tableSearch, setTableSearch] = useState({
+    courses: '',
+    modules: '',
+    students: '',
+    products: '',
+  });
   const [quizCourseId, setQuizCourseId] = useState('');
   const [quizModuleId, setQuizModuleId] = useState('');
   const [quizModules, setQuizModules] = useState([]);
@@ -61,6 +77,33 @@ export default function AdminDashboard() {
     loadProducts();
     loadNotifications();
   }, [navigate]);
+
+  function filterTableRows(rows, tableKey, fields) {
+    const term = tableSearch[tableKey].trim().toLowerCase();
+    if (!term) return rows;
+
+    return rows.filter((row) =>
+      fields.some((field) => {
+        const value = typeof field === 'function' ? field(row) : row[field];
+        return String(value || '').toLowerCase().includes(term);
+      })
+    );
+  }
+
+  function renderTableSearch(tableKey, label) {
+    return (
+      <label className="admin-table-search">
+        <span>{label}</span>
+        <input
+          type="search"
+          value={tableSearch[tableKey]}
+          onChange={(e) =>
+            setTableSearch({ ...tableSearch, [tableKey]: e.target.value })
+          }
+        />
+      </label>
+    );
+  }
 
   async function loadOverview() {
     try {
@@ -100,6 +143,7 @@ export default function AdminDashboard() {
       const formData = new FormData();
       formData.append('name', courseForm.name);
       formData.append('description', courseForm.description);
+      formData.append('category', courseForm.category);
       if (courseForm.image_url) {
         formData.append('image_url', courseForm.image_url);
       }
@@ -112,7 +156,7 @@ export default function AdminDashboard() {
       } else {
         await api.post('/courses', formData);
       }
-      setCourseForm({ id: null, name: '', description: '', image_url: '' });
+      setCourseForm({ id: null, name: '', description: '', category: 'Development', image_url: '' });
       setCourseImage(null);
       setCourseModalOpen(false);
       loadCourses();
@@ -191,9 +235,10 @@ export default function AdminDashboard() {
             id: course.id,
             name: course.name,
             description: course.description || '',
+            category: inferCourseCategory(course),
             image_url: course.image_url || '',
           }
-        : { id: null, name: '', description: '', image_url: '' }
+        : { id: null, name: '', description: '', category: 'Development', image_url: '' }
     );
     setCourseImage(null);
     setCourseModalOpen(true);
@@ -341,63 +386,49 @@ export default function AdminDashboard() {
   }
 
   function renderCourses() {
+    const filteredCourses = filterTableRows(courses, 'courses', [
+      'id',
+      'name',
+      'category',
+      'description',
+    ]);
+
     return (
       <div className="admin-section">
         <div className="admin-section-head">
           <div>
-            <h2 className="admin-title">Courses</h2>
+            <h2 className="admin-title">Public Courses</h2>
             <p className="admin-sub">
-              Manage the same courses that appear on the public course page.
+              Manage the courses that appear on the public study page.
             </p>
           </div>
           <button type="button" className="admin-primary-btn" onClick={() => openCourseModal()}>
-            Add course
+            Add public course
           </button>
         </div>
 
-        <div className="admin-course-grid">
-          {courses.map((c) => (
-            <article className="admin-course-card" key={c.id}>
-              {c.image_url && (
-                <img className="admin-course-image" src={resolveImageUrl(c.image_url)} alt="" />
-              )}
-              <div className="admin-course-category">{inferCourseCategory(c)}</div>
-              <h3>{c.name}</h3>
-              <p>{c.description || 'No course description yet.'}</p>
-              <div className="admin-course-actions">
-                <button
-                  type="button"
-                  onClick={() => openCourseModal(c)}
-                >
-                  Edit course
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('modules');
-                    setSelectedCourseForModules(String(c.id));
-                    loadModulesForCourse(c.id);
-                  }}
-                >
-                  Curriculum
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+        <div className="admin-table-panel">
+          <div className="admin-table-toolbar">
+            <div className="admin-table-count">
+              Showing {filteredCourses.length} of {courses.length} public courses
+            </div>
+            {renderTableSearch('courses', 'Search courses:')}
+          </div>
 
-        <table className="admin-table">
+          <div className="admin-table-shell">
+            <table className="admin-table">
           <thead>
             <tr>
               <th>ID</th>
               <th>Image</th>
               <th>Name</th>
+              <th>Category</th>
               <th>Description</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {courses.map((c) => (
+            {filteredCourses.map((c) => (
               <tr key={c.id}>
                 <td>{c.id}</td>
                 <td>
@@ -408,6 +439,7 @@ export default function AdminDashboard() {
                   )}
                 </td>
                 <td>{c.name}</td>
+                <td>{inferCourseCategory(c)}</td>
                 <td>{c.description}</td>
                 <td>
                   <button
@@ -415,6 +447,17 @@ export default function AdminDashboard() {
                     onClick={() => openCourseModal(c)}
                   >
                     Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('modules');
+                      setSelectedCourseForModules(String(c.id));
+                      loadModulesForCourse(c.id);
+                    }}
+                    style={{ marginLeft: '0.5rem' }}
+                  >
+                    Curriculum
                   </button>
                   <button
                     type="button"
@@ -427,7 +470,9 @@ export default function AdminDashboard() {
               </tr>
             ))}
           </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
 
         {courseModalOpen && (
           <div className="admin-modal-backdrop" role="presentation" onClick={() => setCourseModalOpen(false)}>
@@ -439,7 +484,7 @@ export default function AdminDashboard() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="admin-modal-head">
-                <h3>{courseForm.id ? 'Update course' : 'Add course'}</h3>
+                <h3>{courseForm.id ? 'Update public course' : 'Add public course'}</h3>
                 <button type="button" onClick={() => setCourseModalOpen(false)} aria-label="Close course form">
                   X
                 </button>
@@ -457,6 +502,18 @@ export default function AdminDashboard() {
                 value={courseForm.description}
                 onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
               />
+              <label>Category</label>
+              <select
+                value={courseForm.category}
+                onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
+                required
+              >
+                {COURSE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
               <label>Course image</label>
               <input
                 type="file"
@@ -467,7 +524,7 @@ export default function AdminDashboard() {
                 <img className="admin-modal-preview" src={resolveImageUrl(courseForm.image_url)} alt="" />
               )}
               <button type="submit" className="admin-primary-btn">
-                {courseForm.id ? 'Update course' : 'Add course'}
+                {courseForm.id ? 'Update public course' : 'Add public course'}
               </button>
             </form>
           </div>
@@ -477,6 +534,12 @@ export default function AdminDashboard() {
   }
 
   function renderModules() {
+    const filteredModules = filterTableRows(modules, 'modules', [
+      'id',
+      'title',
+      'materials_count',
+    ]);
+
     return (
       <div className="admin-section">
         <h2 className="admin-title">Modules per Course</h2>
@@ -513,7 +576,16 @@ export default function AdminDashboard() {
               </div>
             </form>
 
-            <table className="admin-table">
+            <div className="admin-table-panel">
+              <div className="admin-table-toolbar">
+                <div className="admin-table-count">
+                  Showing {filteredModules.length} of {modules.length} modules
+                </div>
+                {renderTableSearch('modules', 'Search modules:')}
+              </div>
+
+              <div className="admin-table-shell">
+                <table className="admin-table">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -523,7 +595,7 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {modules.map((m) => (
+                {filteredModules.map((m) => (
                   <tr key={m.id}>
                     <td>{m.id}</td>
                     <td>{m.title}</td>
@@ -540,7 +612,9 @@ export default function AdminDashboard() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+                </table>
+              </div>
+            </div>
           </>
         )}
       </div>
@@ -738,10 +812,27 @@ export default function AdminDashboard() {
       // load on first open
       loadStudents();
     }
+    const filteredStudents = filterTableRows(students, 'students', [
+      'id',
+      'full_name',
+      'email',
+      'course_name',
+      'status',
+    ]);
+
     return (
       <div className="admin-section">
         <h2 className="admin-title">Students</h2>
-        <table className="admin-table">
+        <div className="admin-table-panel">
+          <div className="admin-table-toolbar">
+            <div className="admin-table-count">
+              Showing {filteredStudents.length} of {students.length} students
+            </div>
+            {renderTableSearch('students', 'Search students:')}
+          </div>
+
+          <div className="admin-table-shell">
+            <table className="admin-table">
           <thead>
             <tr>
               <th>ID</th>
@@ -753,7 +844,7 @@ export default function AdminDashboard() {
             </tr>
           </thead>
           <tbody>
-            {students.map((s) => (
+            {filteredStudents.map((s) => (
               <tr key={s.id}>
                 <td>{s.id}</td>
                 <td>{s.full_name}</td>
@@ -778,61 +869,129 @@ export default function AdminDashboard() {
               </tr>
             ))}
           </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
       </div>
     );
   }
 
   function renderProducts() {
+    const filteredProducts = filterTableRows(products, 'products', [
+      'id',
+      'name',
+      'price',
+      'old_price',
+      'discount_percent',
+    ]);
+
     return (
-      <div className="admin-section">
-        <h2 className="admin-title">Add Product</h2>
-        <p className="admin-sub">
-          Create or edit products that will appear on the public shop page.
-        </p>
-
-        <ProductForm
-          initial={editingProduct}
-          onSuccess={() => {
+      <div className="admin-stack">
+        <button
+          type="button"
+          className="admin-add-product-btn"
+          onClick={() => {
             setEditingProduct(null);
-            loadProducts();
+            setProductModalOpen(true);
           }}
-        />
+        >
+          <span aria-hidden="true">+</span>
+          Add Product
+        </button>
 
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Price</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td>{p.name}</td>
-                <td>{p.price}</td>
-                <td>
-                  <button
-                    type="button"
-                    onClick={() => setEditingProduct(p)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteProduct(p.id)}
-                    style={{ marginLeft: '0.5rem', color: '#b91c1c' }}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="admin-section admin-table-panel">
+          <div className="admin-table-toolbar">
+            <h2 className="admin-title">Products</h2>
+            <div className="admin-table-tools">
+              <div className="admin-table-count">
+                Showing {filteredProducts.length} of {products.length} products
+              </div>
+              {renderTableSearch('products', 'Search products:')}
+            </div>
+          </div>
+
+          <div className="admin-table-shell">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Price</th>
+                  <th>Old Price</th>
+                  <th>Off</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.id}</td>
+                    <td>{p.name}</td>
+                    <td>{p.price}</td>
+                    <td>{p.old_price || '-'}</td>
+                    <td>{p.discount_percent ? `${p.discount_percent}%` : '-'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-action-btn edit"
+                        onClick={() => {
+                          setEditingProduct(p);
+                          setProductModalOpen(true);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="admin-action-btn delete"
+                        onClick={() => handleDeleteProduct(p.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {productModalOpen && (
+          <div
+            className="admin-modal-backdrop"
+            role="presentation"
+            onClick={() => setProductModalOpen(false)}
+          >
+            <div
+              className="admin-modal admin-product-modal"
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="admin-modal-head">
+                <h3>{editingProduct ? 'Update product' : 'Add product'}</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingProduct(null);
+                    setProductModalOpen(false);
+                  }}
+                  aria-label="Close product form"
+                >
+                  X
+                </button>
+              </div>
+              <ProductForm
+                initial={editingProduct}
+                onSuccess={() => {
+                  setEditingProduct(null);
+                  setProductModalOpen(false);
+                  loadProducts();
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1081,6 +1240,12 @@ export default function AdminDashboard() {
           box-shadow: none;
         }
 
+        .admin-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 1.25rem;
+        }
+
         .admin-section-head {
           display: flex;
           justify-content: space-between;
@@ -1214,31 +1379,182 @@ export default function AdminDashboard() {
           cursor: pointer;
         }
 
+        .admin-table-panel {
+          padding: 0;
+          overflow: hidden;
+        }
+
+        .admin-table-toolbar {
+          min-height: 5rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 1.25rem 1.45rem;
+          background: #ffffff;
+        }
+
+        .admin-table-toolbar .admin-title {
+          margin: 0;
+        }
+
+        .admin-table-count {
+          color: #475569;
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
+
+        .admin-table-tools {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 1rem;
+          flex-wrap: wrap;
+        }
+
+        .admin-table-search {
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+          color: #000000;
+          font-size: 0.95rem;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .admin-table-search input {
+          width: min(250px, 42vw);
+          height: 2.7rem;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.45rem;
+          padding: 0.5rem 0.7rem;
+          font-size: 0.95rem;
+          outline: none;
+        }
+
+        .admin-table-search input:focus {
+          border-color: #0ea5e9;
+          box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+        }
+
+        .admin-add-product-btn {
+          align-self: flex-start;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.55rem;
+          border: none;
+          border-radius: 0.45rem;
+          background: #0ea5e9;
+          color: #ffffff;
+          cursor: pointer;
+          font-size: 1rem;
+          font-weight: 800;
+          padding: 0.85rem 1.25rem;
+          box-shadow: 0 0.8rem 1.6rem rgba(14, 165, 233, 0.18);
+        }
+
+        .admin-add-product-btn span {
+          display: inline-grid;
+          place-items: center;
+          width: 1.1rem;
+          height: 1.1rem;
+          font-size: 1.25rem;
+          line-height: 1;
+        }
+
+        .admin-table-shell {
+          width: 100%;
+          overflow-x: auto;
+        }
+
+        .admin-table-shell .admin-table {
+          margin-top: 0;
+        }
+
         .admin-table {
           width: 100%;
-          border-collapse: collapse;
+          border-collapse: separate;
+          border-spacing: 0;
           margin-top: 1rem;
-          font-size: 0.85rem;
+          font-size: 0.95rem;
+          background: #ffffff;
         }
 
         .admin-table th,
         .admin-table td {
-          border-bottom: 1px solid #e5e7eb;
-          padding: 0.5rem 0.4rem;
+          border-bottom: 1px solid #d7dde5;
+          border-right: 1px solid #d7dde5;
+          padding: 0.85rem 0.95rem;
           text-align: left;
+          vertical-align: middle;
         }
 
         .admin-table th {
-          font-weight: 600;
-          color: #374151;
+          position: relative;
+          background: #20262c;
+          color: #ffffff;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .admin-table th::after {
+          content: '';
+          position: absolute;
+          right: 0.75rem;
+          top: 50%;
+          width: 0;
+          height: 0;
+          border-left: 0.32rem solid transparent;
+          border-right: 0.32rem solid transparent;
+          border-bottom: 0.55rem solid rgba(255, 255, 255, 0.28);
+          transform: translateY(-70%);
+        }
+
+        .admin-table th:first-child {
+          border-left: none;
+        }
+
+        .admin-table th:last-child,
+        .admin-table td:last-child {
+          border-right: none;
+        }
+
+        .admin-table tbody tr:nth-child(odd) {
+          background: #f1f1f1;
+        }
+
+        .admin-table tbody tr:nth-child(even) {
+          background: #ffffff;
         }
 
         .admin-table td button {
+          cursor: pointer;
+        }
+
+        .admin-table td button:not(.admin-action-btn) {
           border: none;
           background: transparent;
           color: var(--admin-blue);
-          cursor: pointer;
           font-size: 0.8rem;
+        }
+
+        .admin-action-btn {
+          border: none;
+          border-radius: 0.35rem;
+          color: #0f172a;
+          font-size: 0.82rem;
+          font-weight: 800;
+          padding: 0.48rem 0.75rem;
+          margin-right: 0.35rem;
+        }
+
+        .admin-action-btn.edit {
+          background: #ffc107;
+        }
+
+        .admin-action-btn.delete {
+          background: #ff3f4f;
+          color: #ffffff;
         }
 
         .admin-table-image {
@@ -1298,11 +1614,50 @@ export default function AdminDashboard() {
           font-weight: 800;
         }
 
-        .admin-modal input {
+        .admin-modal input,
+        .admin-modal select {
           padding: 0.65rem 0.75rem;
           border-radius: 0.35rem;
           border: 1px solid var(--admin-line);
           font-size: 0.85rem;
+        }
+
+        .admin-product-modal {
+          width: min(620px, 100%);
+          max-height: calc(100vh - 2rem);
+          overflow-y: auto;
+        }
+
+        .admin-product-modal form {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          margin: 0;
+        }
+
+        .admin-product-modal input,
+        .admin-product-modal textarea {
+          width: 100%;
+          padding: 0.72rem 0.8rem;
+          border: 1px solid var(--admin-line);
+          border-radius: 0.4rem;
+          font: inherit;
+        }
+
+        .admin-product-modal textarea {
+          min-height: 5.5rem;
+          resize: vertical;
+        }
+
+        .admin-product-modal button[type='submit'] {
+          align-self: flex-start;
+          border: none;
+          border-radius: 0.4rem;
+          background: var(--admin-blue);
+          color: #ffffff;
+          cursor: pointer;
+          font-weight: 800;
+          padding: 0.7rem 1rem;
         }
 
         .admin-modal-preview {
@@ -1324,6 +1679,23 @@ export default function AdminDashboard() {
 
           .admin-course-grid {
             grid-template-columns: 1fr;
+          }
+
+          .admin-table-toolbar {
+            align-items: flex-start;
+            flex-direction: column;
+            min-height: auto;
+          }
+
+          .admin-table-tools,
+          .admin-table-search {
+            align-items: flex-start;
+            flex-direction: column;
+            width: 100%;
+          }
+
+          .admin-table-search input {
+            width: 100%;
           }
         }
       `}</style>
@@ -1356,7 +1728,7 @@ export default function AdminDashboard() {
                   className={activeTab === 'courses' ? 'active' : ''}
                   onClick={() => setActiveTab('courses')}
                 >
-                  Courses
+                  Public Courses
                 </button>
                 <button
                   type="button"
@@ -1426,7 +1798,7 @@ export default function AdminDashboard() {
           <header className="admin-topbar">
             <div className="admin-topbar-title">
               {activeTab === 'overview' && 'Dashboard'}
-              {activeTab === 'courses' && 'Courses'}
+              {activeTab === 'courses' && 'Public Courses'}
               {activeTab === 'modules' && 'Curriculum'}
               {activeTab === 'materials' && 'Materials'}
               {activeTab === 'quizzes' && 'Quizzes'}

@@ -145,7 +145,7 @@ export default function Services() {
             margin-top: 1.25rem;
             border: none;
             border-radius: 999px;
-            background: #003366;
+            background:  var(--blue);
             color: #ffffff;
             cursor: pointer;
             font-size: 0.85rem;
@@ -155,8 +155,8 @@ export default function Services() {
           }
 
           .service-learn-btn:hover {
-            background: #22d3ee;
-            color: #001f3f;
+            background: var(--richblue);
+            color: #ffffff;
             transform: translateY(-1px);
           }
 

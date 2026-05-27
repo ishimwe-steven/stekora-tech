@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 export default function StudentDashboard() {
@@ -43,10 +43,15 @@ export default function StudentDashboard() {
 
   const startCourse = async () => {
     if (!confirmCourse) return;
+    const firstModule = nextModuleFor(confirmCourse);
     try {
       setStartingCourse(true);
       await api.post(`/students/courses/${confirmCourse.id}/start`);
       setConfirmCourse(null);
+      if (firstModule) {
+        navigate(`/student/course/${confirmCourse.id}/module/${firstModule.id}`);
+        return;
+      }
       await loadDashboard();
     } catch (err) {
       console.error(err);
@@ -56,8 +61,15 @@ export default function StudentDashboard() {
     }
   };
 
-  const firstOpenModule = (course) =>
-    course.modules.find((module) => !module.completed) || course.modules[0];
+  const allCourses = data?.courses || [];
+
+  const courseGrade = (course) =>
+    course.modules_count > 0
+      ? Math.round((course.completed_modules / course.modules_count) * 100)
+      : 0;
+
+  const nextModuleFor = (course) =>
+    course.modules?.find((module) => !module.completed) || course.modules?.[0];
 
   return (
     <>
@@ -68,6 +80,7 @@ export default function StudentDashboard() {
           --sidebar: #1f2f45;
           --line: #d8dee8;
           --cyan: #22d3ee;
+          --blue: #3b82f6;
           --text-dark: #07152c;
           --text-muted: #64748b;
         }
@@ -135,128 +148,141 @@ export default function StudentDashboard() {
           padding: 1.7rem;
         }
 
-        .dashboard-title {
-          font-size: 1.35rem;
-          font-weight: 800;
-          color: var(--richblue);
-          margin: 0 0 0.75rem;
-        }
-
         .dashboard-sub {
           font-size: 0.9rem;
           color: var(--text-muted);
           margin: 0 0 1.5rem;
         }
 
-        .dashboard-panel {
-          background: #ffffff;
-          border: 1px solid var(--line);
-          border-radius: 0.5rem;
-          padding: 1.5rem;
-          margin-bottom: 1.3rem;
-        }
-
-        .course-list {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 1rem;
-        }
-
-        .course-card {
-          background: #ffffff;
-          border-radius: 0.5rem;
-          border: 1px solid var(--line);
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          min-height: 100%;
-        }
-
-        .course-image {
-          width: 100%;
-          aspect-ratio: 16 / 9;
-          object-fit: cover;
-          background: #e8eef6;
-        }
-
-        .course-card-body {
-          padding: 1rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.55rem;
-          flex: 1;
-        }
-
-        .course-name {
-          font-size: 1rem;
-          font-weight: 800;
+        .courses-section {
+          margin: 0;
           color: var(--richblue);
         }
 
-        .course-description {
-          color: var(--text-muted);
-          font-size: 0.83rem;
-          line-height: 1.5;
-          margin: 0;
+        .courses-title {
+          margin: 0 0 1.35rem;
+          color: var(--richblue);
+          font-size: 1.45rem;
+          font-weight: 900;
         }
 
-        .course-status {
-          font-size: 0.78rem;
-          color: #0f766e;
-          font-weight: 800;
+        .student-courses-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 1rem;
         }
 
-        .course-progress {
-          height: 0.45rem;
-          background: #e5e7eb;
-          border-radius: 999px;
+        .student-course-card {
+          min-height: 20.3rem;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          border-radius: 0.5rem;
+          background: #17263a;
+          border: 1px solid rgba(0, 51, 102, 0.12);
+          box-shadow: 0 10px 24px rgba(0, 51, 102, 0.08);
+        }
+
+        .student-course-media {
+          position: relative;
+          height: 9.7rem;
+          background:
+            linear-gradient(135deg, rgba(0, 51, 102, 0.18), rgba(0, 31, 63, 0.78)),
+            #10233a;
           overflow: hidden;
         }
 
-        .course-progress span {
-          display: block;
+        .student-course-media img {
+          width: 100%;
           height: 100%;
-          background: var(--cyan);
+          object-fit: cover;
+          opacity: 0.78;
         }
 
-        .course-action,
-        .module-link {
-          display: inline-flex;
-          justify-content: center;
-          align-items: center;
-          align-self: flex-start;
-          margin-top: auto;
-          font-size: 0.8rem;
-          color: #ffffff;
-          background: var(--richblue);
-          text-decoration: none;
-          border: none;
-          border-radius: 999px;
-          padding: 0.55rem 0.9rem;
-          font-weight: 800;
-          cursor: pointer;
-        }
-
-        .course-action:hover,
-        .module-link:hover {
+        .student-course-badge {
+          position: absolute;
+          top: 1rem;
+          left: 1rem;
+          border-radius: 0.25rem;
           background: var(--cyan);
           color: #001f3f;
+          font-size: 0.78rem;
+          font-weight: 900;
+          padding: 0.36rem 0.5rem;
         }
 
-        .module-list {
-          display: grid;
-          gap: 0.45rem;
-          margin-top: 0.35rem;
+        .student-course-body {
+          flex: 1;
+          padding: 1rem 1rem 1.15rem;
         }
 
-        .module-row {
+        .student-course-meta {
           display: flex;
+          gap: 0.65rem;
+          flex-wrap: wrap;
+          color: #b8c8e6;
+          font-size: 0.74rem;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .student-course-name {
+          margin: 0.55rem 0 0;
+          color: #ffffff;
+          font-size: 1.12rem;
+          line-height: 1.2;
+          font-weight: 900;
+        }
+
+        .student-course-footer {
+          min-height: 4.2rem;
+          display: flex;
+          align-items: center;
           justify-content: space-between;
           gap: 0.7rem;
-          color: #334155;
-          font-size: 0.8rem;
-          border-top: 1px solid #edf1f7;
-          padding-top: 0.45rem;
+          padding: 0.85rem 1rem;
+          border-top: 1px solid rgba(255, 255, 255, 0.08);
+          color: #b8c8e6;
+        }
+
+        .student-course-progress {
+          flex: 1;
+          height: 0.38rem;
+          border-radius: 999px;
+          background: rgba(184, 200, 230, 0.25);
+          overflow: hidden;
+        }
+
+        .student-course-progress span {
+          display: block;
+          height: 100%;
+          border-radius: inherit;
+          background: var(--cyan);
+        }
+
+        .student-course-grade {
+          min-width: 2.3rem;
+          font-weight: 900;
+          color: #b8c8e6;
+          font-size: 0.72rem;
+        }
+
+        .student-course-start {
+          border: none;
+          border-radius: 999px;
+          background: var(--blue);
+          color: #ffffff;
+          cursor: pointer;
+          font-size: 0.72rem;
+          font-weight: 900;
+          padding: 0.42rem 0.7rem;
+        }
+
+        .student-course-open {
+          color: #b8c8e6;
+          text-decoration: none;
+          font-size: 1.45rem;
+          line-height: 1;
         }
 
         .confirm-backdrop {
@@ -324,6 +350,16 @@ export default function StudentDashboard() {
             padding-left: 1rem;
             padding-right: 1rem;
           }
+
+          .student-courses-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (min-width: 769px) and (max-width: 1180px) {
+          .student-courses-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
       `}</style>
 
@@ -331,7 +367,7 @@ export default function StudentDashboard() {
         <aside className="dashboard-sidebar">
           <h2>Student Account</h2>
           <div className="dashboard-menu">
-            <span className="active">My Courses</span>
+            <span className="active">All Courses</span>
             <span>Profile</span>
             <span>Support</span>
             <span
@@ -350,7 +386,7 @@ export default function StudentDashboard() {
 
         <main className="dashboard-main">
           <header className="dashboard-topbar">
-            <div style={{ color: 'var(--text-dark)', fontWeight: 800 }}>My Courses</div>
+            <div style={{ color: 'var(--text-dark)', fontWeight: 800 }}>All Courses</div>
             <div style={{ color: '#475569', fontSize: '0.8rem' }}>Student Account</div>
           </header>
 
@@ -359,84 +395,69 @@ export default function StudentDashboard() {
             {error && !loading && <p className="dashboard-sub">{error}</p>}
 
             {data && (
-              <>
-                <div className="dashboard-panel">
-                  <h1 className="dashboard-title">Welcome, {data.student.full_name}</h1>
-                  <p className="dashboard-sub">
-                    Choose a course, confirm when you are ready to begin, then keep learning until every unit is done.
-                  </p>
-                </div>
-
-                <div className="course-list">
-                  {(data.courses || []).map((course) => {
-                    const progress =
-                      course.modules_count > 0
-                        ? Math.round((course.completed_modules / course.modules_count) * 100)
-                        : 0;
-                    const openModule = firstOpenModule(course);
+              <section className="courses-section">
+                <h1 className="courses-title">All Courses</h1>
+                <div className="student-courses-grid">
+                  {allCourses.map((course) => {
+                    const grade = courseGrade(course);
+                    const nextModule = nextModuleFor(course);
+                    const statusLabel =
+                      course.status === 'completed'
+                        ? 'Completed'
+                        : course.status === 'in_progress'
+                          ? 'In Progress'
+                          : 'Not Started';
 
                     return (
-                      <article key={course.id} className="course-card">
-                        {course.image_url ? (
-                          <img className="course-image" src={resolveImageUrl(course.image_url)} alt="" />
-                        ) : (
-                          <div className="course-image" />
-                        )}
-                        <div className="course-card-body">
-                          <div className="course-name">{course.name}</div>
-                          <p className="course-description">
-                            {course.description || 'A practical Stekora Tech course with guided learning units.'}
-                          </p>
-                          <div className="course-status">
-                            {course.status === 'completed'
-                              ? 'Completed'
-                              : course.status === 'in_progress'
-                                ? 'In progress'
-                                : 'Not started'}
+                      <article key={course.id} className="student-course-card">
+                        <div className="student-course-media">
+                          {course.image_url && (
+                            <img src={resolveImageUrl(course.image_url)} alt="" />
+                          )}
+                          {course.status !== 'not_started' && (
+                            <span className="student-course-badge">{statusLabel}</span>
+                          )}
+                        </div>
+                        <div className="student-course-body">
+                          <div className="student-course-meta">
+                            <span>{course.category || 'Course'}</span>
+                            <span>{course.modules_count} modules</span>
                           </div>
-                          <div className="course-progress" aria-hidden="true">
-                            <span style={{ width: `${progress}%` }} />
+                          <h2 className="student-course-name">{course.name}</h2>
+                        </div>
+                        <div className="student-course-footer">
+                          <div className="student-course-progress" aria-hidden="true">
+                            <span style={{ width: `${grade}%` }} />
                           </div>
-                          <div className="course-description">
-                            {course.completed_modules} of {course.modules_count} units completed
-                          </div>
-
-                          {course.status === 'not_started' && (
+                          <span className="student-course-grade">{grade}%</span>
+                          {course.status === 'not_started' ? (
                             <button
                               type="button"
-                              className="course-action"
+                              className="student-course-start"
                               onClick={() => setConfirmCourse(course)}
                             >
                               Start
                             </button>
-                          )}
-
-                          {course.status !== 'not_started' && (
-                            <>
-                              <div className="module-list">
-                                {course.modules.slice(0, 3).map((module) => (
-                                  <div key={module.id} className="module-row">
-                                    <span>{module.title}</span>
-                                    <span>{module.completed ? 'Done' : `${module.materials_count} materials`}</span>
-                                  </div>
-                                ))}
-                              </div>
-                              {openModule && (
-                                <Link
-                                  to={`/student/course/${course.id}/module/${openModule.id}`}
-                                  className="module-link"
-                                >
-                                  {course.status === 'completed' ? 'Review' : 'Continue'}
-                                </Link>
-                              )}
-                            </>
+                          ) : (
+                            nextModule && (
+                              <Link
+                                to={`/student/course/${course.id}/module/${nextModule.id}`}
+                                className="student-course-open"
+                                aria-label={`Open ${course.name}`}
+                              >
+                                &rsaquo;
+                              </Link>
+                            )
                           )}
                         </div>
                       </article>
                     );
                   })}
                 </div>
-              </>
+                {allCourses.length === 0 && (
+                  <p className="dashboard-sub">No courses have been posted yet.</p>
+                )}
+              </section>
             )}
           </div>
         </main>

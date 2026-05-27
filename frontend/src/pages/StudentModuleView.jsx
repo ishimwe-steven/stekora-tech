@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
 export default function StudentModuleView() {
-  const { moduleId } = useParams();
+  const { courseId, moduleId } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [courseModules, setCourseModules] = useState([]);
+  const [courseName, setCourseName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [answer, setAnswer] = useState('');
@@ -33,10 +35,24 @@ export default function StudentModuleView() {
 
     async function load() {
       try {
-        const { data } = await api.get(`/students/modules/${moduleId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setData(data);
+        setLoading(true);
+        const [moduleResponse, dashboardResponse] = await Promise.all([
+          api.get(`/students/modules/${moduleId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          api.get('/students/dashboard', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        const course = dashboardResponse.data.courses?.find(
+          (item) => String(item.id) === String(courseId)
+        );
+
+        setData(moduleResponse.data);
+        setCourseModules(course?.modules || []);
+        setCourseName(course?.name || '');
+        setError('');
       } catch (err) {
         console.error(err);
         setError(err.response?.data?.msg || 'Failed to load module');
@@ -46,9 +62,25 @@ export default function StudentModuleView() {
     }
 
     load();
-  }, [moduleId, navigate]);
+  }, [courseId, moduleId, navigate]);
 
-  const markComplete = async () => {
+  const currentIndex = useMemo(
+    () => courseModules.findIndex((module) => String(module.id) === String(moduleId)),
+    [courseModules, moduleId]
+  );
+  const sectionNumber = currentIndex >= 0 ? currentIndex + 1 : 1;
+  const totalSections = courseModules.length || 1;
+  const nextModule = currentIndex >= 0 ? courseModules[currentIndex + 1] : null;
+
+  const goNext = () => {
+    if (nextModule) {
+      navigate(`/student/course/${courseId}/module/${nextModule.id}`);
+      return;
+    }
+    navigate('/student/dashboard');
+  };
+
+  const markComplete = async (moveNext = false) => {
     const token = localStorage.getItem('studentToken');
     setCompleteLoading(true);
     try {
@@ -56,7 +88,9 @@ export default function StudentModuleView() {
         headers: { Authorization: `Bearer ${token}` },
       });
       setData((current) => ({ ...current, completed: true }));
-      alert('Unit marked as complete. Admin will see this notification.');
+      if (moveNext) {
+        goNext();
+      }
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.msg || 'Failed to mark unit complete');
@@ -74,7 +108,11 @@ export default function StudentModuleView() {
         { answer },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setQuizResult(data.correct ? 'Correct answer. Well done.' : 'That answer is not correct. Try again.');
+      setQuizResult(
+        data.correct
+          ? `Correct answer. Grade: ${data.score}%.`
+          : `That answer is not correct. Grade: ${data.score}%. Try again.`
+      );
     } catch (err) {
       console.error(err);
       setQuizResult(err.response?.data?.msg || 'Failed to submit quiz');
@@ -87,58 +125,98 @@ export default function StudentModuleView() {
         :root {
           --richblue: #003366;
           --palegray: #f5f5f5;
+          --cyan: #22d3ee;
+          --blue: #3b82f6;
+          --lesson-bg: #102034;
+          --lesson-panel: #142842;
+          --lesson-line: rgba(184, 200, 230, 0.2);
+          --lesson-text: #f8fbff;
+          --lesson-muted: #a9c2ec;
         }
 
         .module-page {
           min-height: 100vh;
-          background: var(--palegray);
-          padding: 2.5rem 1rem;
+          background: var(--lesson-bg);
+          color: var(--lesson-text);
+          padding: 2.4rem;
         }
 
         .module-container {
-          max-width: 60rem;
-          margin: 0 auto;
-          background: #ffffff;
-          border-radius: 1.25rem;
-          padding: 2rem;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+          max-width: 64rem;
+        }
+
+        .section-kicker {
+          color: var(--lesson-muted);
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 0.86rem;
+          letter-spacing: 0;
+          margin-bottom: 0.65rem;
         }
 
         .module-title {
-          font-size: 1.4rem;
-          font-weight: 700;
-          color: var(--richblue);
-          margin-bottom: 0.5rem;
+          margin: 0;
+          color: #ffffff;
+          font-size: clamp(2rem, 4vw, 2.8rem);
+          line-height: 1;
+          font-weight: 900;
+        }
+
+        .module-subtitle {
+          margin: 1.7rem 0 0.7rem;
+          color: #ffffff;
+          font-size: clamp(1.55rem, 3vw, 2rem);
+          line-height: 1.1;
+          font-weight: 900;
+        }
+
+        .lesson-copy {
+          max-width: 58rem;
+          color: var(--lesson-muted);
+          font-size: 1.08rem;
+          line-height: 1.6;
+          margin: 0 0 1.3rem;
+        }
+
+        .lesson-chip {
+          display: inline-block;
+          background: rgba(59, 130, 246, 0.16);
+          color: #6ea8ff;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          padding: 0 0.35rem;
         }
 
         .materials-list {
-          margin-top: 1.5rem;
           display: grid;
           gap: 1rem;
+          margin: 1.8rem 0 1.5rem;
         }
 
         .material-card {
-          border-radius: 0.9rem;
-          border: 1px solid #e5e7eb;
-          padding: 1rem 1.2rem;
+          background: rgba(20, 40, 66, 0.86);
+          border: 1px solid var(--lesson-line);
+          border-radius: 0.5rem;
+          padding: 1rem;
         }
 
         .material-title {
-          font-weight: 600;
-          font-size: 0.95rem;
-          color: var(--richblue);
-          margin-bottom: 0.35rem;
+          color: #ffffff;
+          font-weight: 900;
+          font-size: 1rem;
+          margin-bottom: 0.3rem;
         }
 
         .material-type {
-          font-size: 0.8rem;
-          color: #6b7280;
-          margin-bottom: 0.4rem;
+          color: var(--lesson-muted);
+          font-size: 0.82rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          margin-bottom: 0.55rem;
         }
 
         .material-link {
-          font-size: 0.85rem;
-          color: #2563eb;
+          color: var(--cyan);
+          font-size: 0.9rem;
+          font-weight: 800;
           text-decoration: none;
         }
 
@@ -149,10 +227,10 @@ export default function StudentModuleView() {
         .resource-frame,
         .resource-video {
           width: 100%;
-          margin-top: 0.8rem;
-          border: 1px solid #e5e7eb;
-          border-radius: 0.7rem;
-          background: #f8fafc;
+          margin-top: 0.85rem;
+          border: 1px solid var(--lesson-line);
+          border-radius: 0.45rem;
+          background: #07152c;
         }
 
         .resource-frame {
@@ -163,36 +241,47 @@ export default function StudentModuleView() {
           max-height: 420px;
         }
 
-        .complete-btn,
-        .quiz-btn {
-          border: none;
-          border-radius: 999px;
-          background: var(--richblue);
+        .lesson-note {
+          display: flex;
+          align-items: center;
+          gap: 0.55rem;
+          max-width: 58rem;
+          margin: 1.8rem 0 3.2rem;
+          background: rgba(59, 130, 246, 0.15);
           color: #ffffff;
-          cursor: pointer;
+          border-radius: 0.25rem;
+          padding: 0.85rem 1rem;
+          font-size: 0.95rem;
           font-weight: 800;
-          padding: 0.75rem 1rem;
-          margin-top: 1rem;
         }
 
-        .complete-btn:disabled {
-          opacity: 0.65;
-          cursor: default;
+        .lesson-note span {
+          width: 1.25rem;
+          height: 1.25rem;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          border-radius: 999px;
+          background: var(--blue);
+          color: #ffffff;
+          font-size: 0.78rem;
         }
 
         .quiz-box {
+          max-width: 58rem;
           margin-top: 1.5rem;
-          border: 1px solid #d8dee8;
-          border-radius: 0.9rem;
-          padding: 1rem 1.2rem;
-          background: #f8fbff;
+          border: 1px solid var(--lesson-line);
+          border-radius: 0.5rem;
+          padding: 1rem;
+          background: rgba(20, 40, 66, 0.78);
         }
 
         .quiz-title {
           margin: 0 0 0.6rem;
-          color: var(--richblue);
+          color: #ffffff;
           font-size: 1rem;
-          font-weight: 800;
+          font-weight: 900;
         }
 
         .quiz-options {
@@ -205,40 +294,123 @@ export default function StudentModuleView() {
           display: flex;
           gap: 0.55rem;
           align-items: center;
+          color: var(--lesson-muted);
+          font-size: 0.95rem;
+        }
+
+        .quiz-btn,
+        .next-btn,
+        .complete-btn {
+          min-height: 2.65rem;
+          border-radius: 0.28rem;
+          cursor: pointer;
+          font-weight: 900;
+          padding: 0.7rem 1.25rem;
+        }
+
+        .quiz-btn,
+        .complete-btn {
+          border: none;
+          background: var(--cyan);
+          color: #001f3f;
+        }
+
+        .next-btn {
+          border: 1px solid #8ea8d0;
+          background: transparent;
+          color: #ffffff;
+        }
+
+        .complete-btn:disabled {
+          opacity: 0.65;
+          cursor: default;
+        }
+
+        .lesson-footer {
+          max-width: 58rem;
+          border-top: 1px solid var(--lesson-line);
+          padding-top: 1rem;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 1rem;
+        }
+
+        .lesson-footer-section {
+          margin-right: auto;
+          color: var(--lesson-muted);
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 0.86rem;
+        }
+
+        .xp-pill {
+          border-radius: 999px;
+          background: rgba(184, 200, 230, 0.12);
+          color: var(--lesson-muted);
+          padding: 0.65rem 0.85rem;
           font-size: 0.9rem;
-          color: #334155;
+          font-weight: 800;
+        }
+
+        .state-message {
+          color: var(--lesson-muted);
+        }
+
+        @media (max-width: 720px) {
+          .module-page {
+            padding: 1.3rem 1rem;
+          }
+
+          .lesson-footer {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .lesson-footer-section {
+            margin-right: 0;
+          }
+
+          .next-btn,
+          .complete-btn {
+            width: 100%;
+          }
         }
       `}</style>
 
       <div className="module-page">
-        <div className="module-container">
-          {loading && <p>Loading module...</p>}
-          {error && !loading && <p>{error}</p>}
+        <main className="module-container">
+          {loading && <p className="state-message">Loading module...</p>}
+          {error && !loading && <p className="state-message">{error}</p>}
 
           {data && (
             <>
+              <div className="section-kicker">
+                Section {sectionNumber} / {totalSections}
+              </div>
               <h1 className="module-title">{data.module.title}</h1>
-              <p style={{ fontSize: '0.9rem', color: '#4b5563' }}>
-                Below are notes and videos for this module.
+              <h2 className="module-subtitle">
+                Welcome to {courseName || 'Stekora Tech Academy'}
+              </h2>
+              <p className="lesson-copy">
+                This section gives you a focused learning path with{' '}
+                <span className="lesson-chip">guided materials</span> and practice content from
+                your course. Open each resource, study the notes or videos, then complete the
+                section when you are ready to continue.
               </p>
-              <button
-                type="button"
-                className="complete-btn"
-                disabled={data.completed || completeLoading}
-                onClick={markComplete}
-              >
-                {data.completed ? 'Unit completed' : completeLoading ? 'Saving...' : 'Mark unit complete'}
-              </button>
+              <p className="lesson-copy">
+                You can move through the module step by step. When a quiz is available, submit your
+                answer to receive a small grade for this module.
+              </p>
 
               <div className="materials-list">
                 {data.materials.map((m) => {
                   const resourceUrl = resolveResourceUrl(m.file_url);
                   const youtubeUrl = getYoutubeEmbedUrl(resourceUrl);
                   return (
-                    <div key={m.id} className="material-card">
+                    <section key={m.id} className="material-card">
                       <div className="material-title">{m.title}</div>
                       <div className="material-type">
-                        {m.type === 'note' ? 'Note (PDF / document)' : 'Video'}
+                        {m.type === 'note' ? 'Note / document' : 'Video lesson'}
                       </div>
                       {resourceUrl && (
                         <>
@@ -266,12 +438,12 @@ export default function StudentModuleView() {
                           )}
                         </>
                       )}
-                    </div>
+                    </section>
                   );
                 })}
                 {data.materials.length === 0 && (
-                  <p style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                    No materials have been uploaded for this module yet.
+                  <p className="lesson-copy">
+                    No materials have been uploaded for this section yet.
                   </p>
                 )}
               </div>
@@ -279,7 +451,9 @@ export default function StudentModuleView() {
               {data.quiz && (
                 <form className="quiz-box" onSubmit={submitQuiz}>
                   <h2 className="quiz-title">{data.quiz.title}</h2>
-                  <p style={{ margin: 0, color: '#334155' }}>{data.quiz.question}</p>
+                  <p className="lesson-copy" style={{ marginBottom: 0 }}>
+                    {data.quiz.question}
+                  </p>
                   <div className="quiz-options">
                     {[
                       ['A', data.quiz.option_a],
@@ -302,17 +476,43 @@ export default function StudentModuleView() {
                   </div>
                   <button type="submit" className="quiz-btn">Submit quiz</button>
                   {quizResult && (
-                    <p style={{ margin: '0.8rem 0 0', color: '#003366', fontWeight: 700 }}>
+                    <p className="lesson-copy" style={{ marginTop: '0.85rem', fontWeight: 800 }}>
                       {quizResult}
                     </p>
                   )}
                 </form>
               )}
+
+              <div className="lesson-note">
+                <span>i</span>
+                Click on the "Mark Complete & Next" button below to proceed to the next section.
+              </div>
+
+              <footer className="lesson-footer">
+                <div className="lesson-footer-section">
+                  Section {sectionNumber} / {totalSections}
+                </div>
+                <div className="xp-pill">+10</div>
+                <button type="button" className="next-btn" onClick={goNext}>
+                  Next
+                </button>
+                <button
+                  type="button"
+                  className="complete-btn"
+                  disabled={completeLoading}
+                  onClick={() => markComplete(true)}
+                >
+                  {completeLoading
+                    ? 'Saving...'
+                    : data.completed
+                      ? 'Completed & Next'
+                      : 'Mark Complete & Next'}
+                </button>
+              </footer>
             </>
           )}
-        </div>
+        </main>
       </div>
     </>
   );
 }
-

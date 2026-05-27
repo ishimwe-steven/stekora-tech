@@ -45,6 +45,18 @@ async function ensureLearningTables() {
       UNIQUE KEY unique_student_course (student_id, course_id)
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS student_module_grades (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      student_id INT NOT NULL,
+      module_id INT NOT NULL,
+      score INT NOT NULL DEFAULT 0,
+      passed TINYINT(1) NOT NULL DEFAULT 0,
+      graded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_student_module_grade (student_id, module_id)
+    )
+  `);
 }
 
 async function ensureCourseImageColumn() {
@@ -230,27 +242,31 @@ router.get('/dashboard', studentAuth, async (req, res) => {
       [id, id]
     );
 
-    const startedCourseIds = courseRows
-      .filter((item) => item.status)
-      .map((item) => item.id);
+    const courseIds = courseRows.map((item) => item.id);
 
     const modulesByCourse = new Map();
-    if (startedCourseIds.length > 0) {
+    if (courseIds.length > 0) {
       const [rows] = await pool.query(
         `SELECT m.course_id,
                 m.id AS module_id,
                 m.title AS module_title,
                 mc.id AS completion_id,
+                smg.score AS grade_score,
+                smg.passed AS grade_passed,
+                smg.graded_at,
                 COUNT(mat.id) AS materials_count
          FROM modules m
          LEFT JOIN materials mat ON mat.module_id = m.id
          LEFT JOIN module_completions mc
            ON mc.module_id = m.id
           AND mc.student_id = ?
+         LEFT JOIN student_module_grades smg
+           ON smg.module_id = m.id
+          AND smg.student_id = ?
          WHERE m.course_id IN (?)
-         GROUP BY m.course_id, m.id, m.title, mc.id
+         GROUP BY m.course_id, m.id, m.title, mc.id, smg.score, smg.passed, smg.graded_at
          ORDER BY m.course_id ASC, m.id ASC`,
-        [id, startedCourseIds]
+        [id, id, courseIds]
       );
 
       for (const row of rows) {
@@ -262,6 +278,9 @@ router.get('/dashboard', studentAuth, async (req, res) => {
           title: row.module_title,
           materials_count: Number(row.materials_count || 0),
           completed: Boolean(row.completion_id),
+          grade_score: row.grade_score === null || row.grade_score === undefined ? null : Number(row.grade_score),
+          grade_passed: Boolean(row.grade_passed),
+          graded_at: row.graded_at,
         });
       }
     }
@@ -407,7 +426,17 @@ router.post('/modules/:moduleId/quiz/submit', studentAuth, async (req, res) => {
     }
 
     const correct = String(answer || '').toUpperCase() === String(quiz.correct_option || '').toUpperCase();
-    res.json({ correct });
+    await pool.query(
+      `INSERT INTO student_module_grades (student_id, module_id, score, passed, graded_at)
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE
+         score = VALUES(score),
+         passed = VALUES(passed),
+         graded_at = NOW()`,
+      [req.student.id, moduleId, correct ? 100 : 0, correct ? 1 : 0]
+    );
+
+    res.json({ correct, score: correct ? 100 : 0 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
