@@ -15,6 +15,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) =>
     cb(null, Date.now() + path.extname(file.originalname)),
 });
+
 const upload = multer({ storage });
 
 async function ensureLearningTables() {
@@ -29,11 +30,31 @@ async function ensureLearningTables() {
       option_c VARCHAR(255),
       option_d VARCHAR(255),
       correct_option VARCHAR(1) NOT NULL,
+      question_order INT DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY unique_module_quiz (module_id)
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
+
+  try {
+    await pool.query('ALTER TABLE module_quizzes DROP INDEX unique_module_quiz');
+  } catch (err) {
+    if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY') {
+      console.error('Index drop warning:', err.message);
+    }
+  }
+
+  const [quizColumns] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'module_quizzes'
+       AND COLUMN_NAME = 'question_order'`
+  );
+
+  if (quizColumns.length === 0) {
+    await pool.query('ALTER TABLE module_quizzes ADD COLUMN question_order INT DEFAULT 1');
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS module_completions (
@@ -54,6 +75,7 @@ async function ensureCourseColumns() {
        AND TABLE_NAME = 'courses'
        AND COLUMN_NAME IN ('image_url', 'category')`
   );
+
   const existing = new Set(columns.map((column) => column.COLUMN_NAME));
 
   if (!existing.has('image_url')) {
@@ -61,7 +83,25 @@ async function ensureCourseColumns() {
   }
 
   if (!existing.has('category')) {
-    await pool.query("ALTER TABLE courses ADD COLUMN category VARCHAR(80) NULL DEFAULT 'Development'");
+    await pool.query(
+      "ALTER TABLE courses ADD COLUMN category VARCHAR(80) NULL DEFAULT 'Development'"
+    );
+  }
+}
+
+async function ensureMaterialColumns() {
+  const [columns] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'materials'
+       AND COLUMN_NAME IN ('content')`
+  );
+
+  const existing = new Set(columns.map((column) => column.COLUMN_NAME));
+
+  if (!existing.has('content')) {
+    await pool.query('ALTER TABLE materials ADD COLUMN content LONGTEXT NULL');
   }
 }
 
@@ -69,13 +109,24 @@ async function ensureCourseColumns() {
    COURSES
 ========================= */
 
-// GET /api/courses
 router.get('/', async (req, res) => {
   try {
     await ensureCourseColumns();
+
     const [rows] = await pool.query(
-      'SELECT id, name, description, category, image_url FROM courses ORDER BY id ASC'
+      `SELECT 
+         c.id,
+         c.name,
+         c.description,
+         c.category,
+         c.image_url,
+         COUNT(m.id) AS modules_count
+       FROM courses c
+       LEFT JOIN modules m ON m.course_id = c.id
+       GROUP BY c.id
+       ORDER BY c.id ASC`
     );
+
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -83,45 +134,107 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/courses  (admin)
 router.post('/', auth, upload.single('image'), async (req, res) => {
-  const { name, description, category } = req.body;
+  const { name, description, category, modules } = req.body;
+
   if (!name) return res.status(400).json({ msg: 'Name is required' });
+
+  let moduleList = [];
+
+  try {
+    moduleList = JSON.parse(modules || '[]');
+  } catch {
+    moduleList = [];
+  }
+
+  moduleList = moduleList.map((m) => String(m).trim()).filter(Boolean);
+
+  if (moduleList.length === 0) {
+    return res.status(400).json({
+      msg: 'Please add at least one module before saving this course.',
+    });
+  }
+
+  const connection = await pool.getConnection();
 
   try {
     await ensureCourseColumns();
+    await connection.beginTransaction();
+
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
-    const [result] = await pool.query(
+
+    const [result] = await connection.query(
       'INSERT INTO courses (name, description, category, image_url) VALUES (?, ?, ?, ?)',
       [name, description || null, category || 'Development', imageUrl]
     );
+
+    const courseId = result.insertId;
+
+    for (const moduleTitle of moduleList) {
+      await connection.query(
+        'INSERT INTO modules (course_id, title) VALUES (?, ?)',
+        [courseId, moduleTitle]
+      );
+    }
+
+    await connection.commit();
+
     const [[course]] = await pool.query(
-      'SELECT id, name, description, category, image_url FROM courses WHERE id = ?',
-      [result.insertId]
+      `SELECT 
+         c.id,
+         c.name,
+         c.description,
+         c.category,
+         c.image_url,
+         COUNT(m.id) AS modules_count
+       FROM courses c
+       LEFT JOIN modules m ON m.course_id = c.id
+       WHERE c.id = ?
+       GROUP BY c.id`,
+      [courseId]
     );
+
     res.status(201).json(course);
   } catch (err) {
+    await connection.rollback();
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
+  } finally {
+    connection.release();
   }
 });
 
-// PUT /api/courses/:id (admin)
 router.put('/:id', auth, upload.single('image'), async (req, res) => {
   const { id } = req.params;
   const { name, description, category } = req.body;
 
   try {
     await ensureCourseColumns();
-    const imageUrl = req.file ? `/uploads/${req.file.filename}` : req.body.image_url || null;
+
+    const imageUrl = req.file
+      ? `/uploads/${req.file.filename}`
+      : req.body.image_url || null;
+
     await pool.query(
       'UPDATE courses SET name = ?, description = ?, category = ?, image_url = COALESCE(?, image_url) WHERE id = ?',
       [name, description || null, category || 'Development', imageUrl, id]
     );
+
     const [[course]] = await pool.query(
-      'SELECT id, name, description, category, image_url FROM courses WHERE id = ?',
+      `SELECT 
+         c.id,
+         c.name,
+         c.description,
+         c.category,
+         c.image_url,
+         COUNT(m.id) AS modules_count
+       FROM courses c
+       LEFT JOIN modules m ON m.course_id = c.id
+       WHERE c.id = ?
+       GROUP BY c.id`,
       [id]
     );
+
     res.json(course);
   } catch (err) {
     console.error(err);
@@ -129,9 +242,9 @@ router.put('/:id', auth, upload.single('image'), async (req, res) => {
   }
 });
 
-// DELETE /api/courses/:id (admin)
 router.delete('/:id', auth, async (req, res) => {
   const { id } = req.params;
+
   try {
     await pool.query('DELETE FROM courses WHERE id = ?', [id]);
     res.json({ msg: 'Course deleted' });
@@ -145,17 +258,19 @@ router.delete('/:id', auth, async (req, res) => {
    MODULES
 ========================= */
 
-// GET /api/courses/:courseId/modules  (with materials summary)
 router.get('/:courseId/modules', async (req, res) => {
   const { courseId } = req.params;
+
   try {
     const [rows] = await pool.query(
       `SELECT 
          m.id AS module_id,
          m.title AS module_title,
-         COUNT(mat.id) AS materials_count
+         COUNT(DISTINCT mat.id) AS materials_count,
+         COUNT(DISTINCT q.id) AS assessment_count
        FROM modules m
        LEFT JOIN materials mat ON mat.module_id = m.id
+       LEFT JOIN module_quizzes q ON q.module_id = m.id
        WHERE m.course_id = ?
        GROUP BY m.id
        ORDER BY m.id ASC`,
@@ -166,7 +281,8 @@ router.get('/:courseId/modules', async (req, res) => {
       rows.map((r) => ({
         id: r.module_id,
         title: r.module_title,
-        materials_count: r.materials_count,
+        materials_count: Number(r.materials_count || 0),
+        assessment_count: Number(r.assessment_count || 0),
       }))
     );
   } catch (err) {
@@ -175,10 +291,10 @@ router.get('/:courseId/modules', async (req, res) => {
   }
 });
 
-// POST /api/courses/:courseId/modules  (admin)
 router.post('/:courseId/modules', auth, async (req, res) => {
   const { courseId } = req.params;
   const { title } = req.body;
+
   if (!title) return res.status(400).json({ msg: 'Title is required' });
 
   try {
@@ -186,10 +302,12 @@ router.post('/:courseId/modules', auth, async (req, res) => {
       'INSERT INTO modules (course_id, title) VALUES (?, ?)',
       [courseId, title]
     );
+
     const [[module]] = await pool.query(
       'SELECT id, course_id, title FROM modules WHERE id = ?',
       [result.insertId]
     );
+
     res.status(201).json(module);
   } catch (err) {
     console.error(err);
@@ -197,9 +315,9 @@ router.post('/:courseId/modules', auth, async (req, res) => {
   }
 });
 
-// DELETE /api/courses/modules/:moduleId (admin)
 router.delete('/modules/:moduleId', auth, async (req, res) => {
   const { moduleId } = req.params;
+
   try {
     await pool.query('DELETE FROM modules WHERE id = ?', [moduleId]);
     res.json({ msg: 'Module deleted' });
@@ -210,52 +328,58 @@ router.delete('/modules/:moduleId', auth, async (req, res) => {
 });
 
 /* =========================
-   MATERIALS (NOTES & VIDEOS)
+   MATERIALS / SECTIONS
 ========================= */
 
-// POST /api/courses/modules/:moduleId/materials  (admin)
-router.post(
-  '/modules/:moduleId/materials',
-  auth,
-  upload.single('file'),
-  async (req, res) => {
-    const { moduleId } = req.params;
-    const { title, type, file_url } = req.body;
+router.post('/modules/:moduleId/materials', auth, upload.single('file'), async (req, res) => {
+  const { moduleId } = req.params;
+  const { title, type, file_url, content } = req.body;
 
-    if (!title || !type) {
-      return res.status(400).json({ msg: 'Title and type are required' });
-    }
-
-    let finalUrl = file_url || null;
-    if (req.file) {
-      finalUrl = `/uploads/${req.file.filename}`;
-    }
-
-    try {
-      const [result] = await pool.query(
-        'INSERT INTO materials (module_id, title, type, file_url, created_at) VALUES (?,?,?,?, NOW())',
-        [moduleId, title, type, finalUrl]
-      );
-      const [[material]] = await pool.query(
-        'SELECT id, module_id, title, type, file_url, created_at FROM materials WHERE id = ?',
-        [result.insertId]
-      );
-      res.status(201).json(material);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ msg: 'Server error' });
-    }
+  if (!title || !type) {
+    return res.status(400).json({ msg: 'Title and type are required' });
   }
-);
 
-// GET /api/courses/modules/:moduleId/materials
+  if (type === 'section' && !content) {
+    return res.status(400).json({ msg: 'Section content is required' });
+  }
+
+  let finalUrl = file_url || '';
+
+  if (req.file) {
+    finalUrl = `/uploads/${req.file.filename}`;
+  }
+
+  try {
+    await ensureMaterialColumns();
+
+    const [result] = await pool.query(
+      'INSERT INTO materials (module_id, title, type, file_url, content, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+      [moduleId, title, type, finalUrl, content || null]
+    );
+
+    const [[material]] = await pool.query(
+      'SELECT id, module_id, title, type, file_url, content, created_at FROM materials WHERE id = ?',
+      [result.insertId]
+    );
+
+    res.status(201).json(material);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
 router.get('/modules/:moduleId/materials', async (req, res) => {
   const { moduleId } = req.params;
+
   try {
+    await ensureMaterialColumns();
+
     const [materials] = await pool.query(
-      'SELECT id, title, type, file_url, created_at FROM materials WHERE module_id = ? ORDER BY id ASC',
+      'SELECT id, title, type, file_url, content, created_at FROM materials WHERE module_id = ? ORDER BY id ASC',
       [moduleId]
     );
+
     res.json(materials);
   } catch (err) {
     console.error(err);
@@ -263,73 +387,189 @@ router.get('/modules/:moduleId/materials', async (req, res) => {
   }
 });
 
-// GET /api/courses/modules/:moduleId/quiz
+router.put('/materials/:materialId', auth, upload.single('file'), async (req, res) => {
+  const { materialId } = req.params;
+  const { title, type, file_url, content } = req.body;
+
+  if (!title || !type) {
+    return res.status(400).json({ msg: 'Title and type are required' });
+  }
+
+  if (type === 'section' && !content) {
+    return res.status(400).json({ msg: 'Section content is required' });
+  }
+
+  try {
+    await ensureMaterialColumns();
+
+    const finalUrl = req.file ? `/uploads/${req.file.filename}` : file_url || '';
+
+    await pool.query(
+      'UPDATE materials SET title = ?, type = ?, file_url = COALESCE(?, file_url), content = ? WHERE id = ?',
+      [title, type, finalUrl, content || null, materialId]
+    );
+
+    const [[material]] = await pool.query(
+      'SELECT id, module_id, title, type, file_url, content, created_at FROM materials WHERE id = ?',
+      [materialId]
+    );
+
+    res.json(material);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+router.delete('/materials/:materialId', auth, async (req, res) => {
+  const { materialId } = req.params;
+
+  try {
+    await pool.query('DELETE FROM materials WHERE id = ?', [materialId]);
+    res.json({ msg: 'Material deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  }
+});
+
+/* =========================
+   ASSESSMENTS
+========================= */
+
+// GET all assessment questions for a module
 router.get('/modules/:moduleId/quiz', async (req, res) => {
   const { moduleId } = req.params;
+
   try {
     await ensureLearningTables();
-    const [[quiz]] = await pool.query(
-      `SELECT id, module_id, title, question, option_a, option_b, option_c, option_d, correct_option
+
+    const [questions] = await pool.query(
+      `SELECT id, module_id, title, question, option_a, option_b, option_c, option_d, correct_option, question_order
        FROM module_quizzes
-       WHERE module_id = ?`,
+       WHERE module_id = ?
+       ORDER BY question_order ASC, id ASC`,
       [moduleId]
     );
-    res.json(quiz || null);
+
+    res.json(questions);
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-// POST /api/courses/modules/:moduleId/quiz (admin)
+// Save assessment questions. Admin must send at least 3 questions.
 router.post('/modules/:moduleId/quiz', auth, async (req, res) => {
   const { moduleId } = req.params;
-  const {
-    title,
-    question,
-    option_a,
-    option_b,
-    option_c,
-    option_d,
-    correct_option,
-  } = req.body;
+  const { title, questions } = req.body;
 
-  if (!title || !question || !option_a || !option_b || !correct_option) {
-    return res.status(400).json({ msg: 'Quiz title, question, two options, and answer are required' });
+  if (!Array.isArray(questions) || questions.length < 3) {
+    return res.status(400).json({
+      msg: 'Assessment must have at least 3 questions.',
+    });
   }
+
+  const cleanQuestions = questions.map((q, index) => ({
+    title: title || q.title || 'Section Assessment',
+    question: String(q.question || '').trim(),
+    option_a: String(q.option_a || '').trim(),
+    option_b: String(q.option_b || '').trim(),
+    option_c: String(q.option_c || '').trim(),
+    option_d: String(q.option_d || '').trim(),
+    correct_option: String(q.correct_option || '').toUpperCase().trim(),
+    question_order: index + 1,
+  }));
+
+  const invalid = cleanQuestions.some(
+    (q) =>
+      !q.question ||
+      !q.option_a ||
+      !q.option_b ||
+      !['A', 'B', 'C', 'D'].includes(q.correct_option)
+  );
+
+  if (invalid) {
+    return res.status(400).json({
+      msg: 'Each question must have a question, option A, option B, and correct answer A/B/C/D.',
+    });
+  }
+
+  const connection = await pool.getConnection();
 
   try {
     await ensureLearningTables();
-    await pool.query(
-      `INSERT INTO module_quizzes
-       (module_id, title, question, option_a, option_b, option_c, option_d, correct_option)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         title = VALUES(title),
-         question = VALUES(question),
-         option_a = VALUES(option_a),
-         option_b = VALUES(option_b),
-         option_c = VALUES(option_c),
-         option_d = VALUES(option_d),
-         correct_option = VALUES(correct_option)`,
-      [moduleId, title, question, option_a, option_b, option_c || null, option_d || null, correct_option]
-    );
 
-    const [[quiz]] = await pool.query(
-      'SELECT * FROM module_quizzes WHERE module_id = ?',
+    await connection.beginTransaction();
+
+    await connection.query('DELETE FROM module_quizzes WHERE module_id = ?', [moduleId]);
+
+    for (const q of cleanQuestions) {
+      await connection.query(
+        `INSERT INTO module_quizzes
+         (module_id, title, question, option_a, option_b, option_c, option_d, correct_option, question_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          moduleId,
+          q.title,
+          q.question,
+          q.option_a,
+          q.option_b,
+          q.option_c || null,
+          q.option_d || null,
+          q.correct_option,
+          q.question_order,
+        ]
+      );
+    }
+
+    await connection.commit();
+
+    const [savedQuestions] = await pool.query(
+      `SELECT id, module_id, title, question, option_a, option_b, option_c, option_d, correct_option, question_order
+       FROM module_quizzes
+       WHERE module_id = ?
+       ORDER BY question_order ASC, id ASC`,
       [moduleId]
     );
-    res.json(quiz);
+
+    res.json({
+      msg: 'Assessment saved successfully',
+      questions: savedQuestions,
+    });
+  } catch (err) {
+    await connection.rollback();
+    console.error(err);
+    res.status(500).json({ msg: 'Server error' });
+  } finally {
+    connection.release();
+  }
+});
+
+// Delete one assessment question
+router.delete('/quiz/:questionId', auth, async (req, res) => {
+  const { questionId } = req.params;
+
+  try {
+    await ensureLearningTables();
+
+    await pool.query('DELETE FROM module_quizzes WHERE id = ?', [questionId]);
+
+    res.json({ msg: 'Assessment question deleted' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-// GET /api/courses/completions (admin notifications)
+/* =========================
+   COMPLETIONS
+========================= */
+
 router.get('/completions', auth, async (req, res) => {
   try {
     await ensureLearningTables();
+
     const [rows] = await pool.query(
       `SELECT mc.id, mc.created_at,
               s.full_name AS student_name,
@@ -343,6 +583,7 @@ router.get('/completions', auth, async (req, res) => {
        ORDER BY mc.created_at DESC
        LIMIT 50`
     );
+
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -351,4 +592,3 @@ router.get('/completions', auth, async (req, res) => {
 });
 
 module.exports = router;
-

@@ -19,13 +19,14 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview'); // overview | courses | modules | materials | quizzes | students | products | settings
   const [overview, setOverview] = useState(null);
   const [courses, setCourses] = useState([]);
-  const [courseForm, setCourseForm] = useState({
-    id: null,
-    name: '',
-    description: '',
-    category: 'Development',
-    image_url: '',
-  });
+ const [courseForm, setCourseForm] = useState({
+  id: null,
+  name: '',
+  description: '',
+  category: 'Development',
+  image_url: '',
+  modules: [''],
+});
   const [courseImage, setCourseImage] = useState(null);
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [selectedCourseForModules, setSelectedCourseForModules] = useState('');
@@ -34,7 +35,13 @@ export default function AdminDashboard() {
   const [materialCourseId, setMaterialCourseId] = useState('');
   const [materialModuleId, setMaterialModuleId] = useState('');
   const [materialModules, setMaterialModules] = useState([]);
-  const [materialForm, setMaterialForm] = useState({ title: '', type: 'note', file_url: '' });
+  const [materialForm, setMaterialForm] = useState({
+  id: null,
+  title: '',
+  type: 'section',
+  file_url: '',
+  content: '',
+})
   const [materialFile, setMaterialFile] = useState(null);
   const [students, setStudents] = useState([]);
   const [products, setProducts] = useState([]);
@@ -47,17 +54,25 @@ export default function AdminDashboard() {
     students: '',
     products: '',
   });
-  const [quizCourseId, setQuizCourseId] = useState('');
-  const [quizModuleId, setQuizModuleId] = useState('');
-  const [quizModules, setQuizModules] = useState([]);
-  const [quizForm, setQuizForm] = useState({
-    title: '',
+  const emptyAssessmentQuestion = {
     question: '',
     option_a: '',
     option_b: '',
     option_c: '',
     option_d: '',
     correct_option: 'A',
+  };
+
+  const [quizCourseId, setQuizCourseId] = useState('');
+  const [quizModuleId, setQuizModuleId] = useState('');
+  const [quizModules, setQuizModules] = useState([]);
+  const [quizForm, setQuizForm] = useState({
+    title: 'Section Assessment',
+    questions: [
+      { ...emptyAssessmentQuestion },
+      { ...emptyAssessmentQuestion },
+      { ...emptyAssessmentQuestion },
+    ],
   });
   const [settingsForm, setSettingsForm] = useState({
     current_password: '',
@@ -137,35 +152,60 @@ export default function AdminDashboard() {
     }
   }
 
-  async function handleSaveCourse(e) {
-    e.preventDefault();
-    try {
-      const formData = new FormData();
-      formData.append('name', courseForm.name);
-      formData.append('description', courseForm.description);
-      formData.append('category', courseForm.category);
-      if (courseForm.image_url) {
-        formData.append('image_url', courseForm.image_url);
-      }
-      if (courseImage) {
-        formData.append('image', courseImage);
-      }
+async function handleSaveCourse(e) {
+  e.preventDefault();
 
-      if (courseForm.id) {
-        await api.put(`/courses/${courseForm.id}`, formData);
-      } else {
-        await api.post('/courses', formData);
-      }
-      setCourseForm({ id: null, name: '', description: '', category: 'Development', image_url: '' });
-      setCourseImage(null);
-      setCourseModalOpen(false);
-      loadCourses();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to save course');
-    }
+  const cleanModules = courseForm.modules
+    .map((module) => module.trim())
+    .filter(Boolean);
+
+  if (!courseForm.id && cleanModules.length === 0) {
+    alert('Please add at least one module before saving this course.');
+    return;
   }
 
+  try {
+    const formData = new FormData();
+    formData.append('name', courseForm.name);
+    formData.append('description', courseForm.description);
+    formData.append('category', courseForm.category);
+    formData.append('modules', JSON.stringify(cleanModules));
+
+    if (courseForm.image_url) {
+      formData.append('image_url', courseForm.image_url);
+    }
+
+    if (courseImage) {
+      formData.append('image', courseImage);
+    }
+
+    if (courseForm.id) {
+      await api.put(`/courses/${courseForm.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    } else {
+      await api.post('/courses', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+
+    setCourseForm({
+      id: null,
+      name: '',
+      description: '',
+      category: 'Development',
+      image_url: '',
+      modules: [''],
+    });
+
+    setCourseImage(null);
+    setCourseModalOpen(false);
+    loadCourses();
+  } catch (err) {
+    console.error('SAVE COURSE ERROR:', err.response?.data || err.message);
+    alert(err.response?.data?.msg || err.response?.data?.error || 'Failed to save course');
+  }
+}
   async function handleDeleteCourse(id) {
     if (!window.confirm('Delete this course?')) return;
     try {
@@ -204,45 +244,83 @@ export default function AdminDashboard() {
   }
 
   async function handleUploadMaterial(e) {
-    e.preventDefault();
-    if (!materialModuleId) return;
+  e.preventDefault();
+  if (!materialModuleId) return;
 
-    try {
-      const formData = new FormData();
-      formData.append('title', materialForm.title);
-      formData.append('type', materialForm.type);
-      if (materialForm.file_url) {
-        formData.append('file_url', materialForm.file_url);
-      }
-      if (materialFile) {
-        formData.append('file', materialFile);
-      }
-      await api.post(`/courses/modules/${materialModuleId}/materials`, formData);
-      setMaterialForm({ title: '', type: 'note', file_url: '' });
-      setMaterialFile(null);
-      loadModulesForCourse(materialCourseId, true);
-      alert('Material uploaded');
-    } catch (err) {
-      console.error(err);
-      alert(err.response?.data?.msg || 'Failed to upload material');
+  try {
+    const formData = new FormData();
+    formData.append('title', materialForm.title);
+    formData.append('type', materialForm.type);
+    formData.append('file_url', materialForm.file_url);
+    formData.append('content', materialForm.content);
+
+    if (materialFile) {
+      formData.append('file', materialFile);
     }
+
+    if (materialForm.id) {
+      await api.put(`/courses/materials/${materialForm.id}`, formData);
+      alert('Section updated');
+    } else {
+      await api.post(`/courses/modules/${materialModuleId}/materials`, formData);
+      alert('Section uploaded');
+    }
+
+    setMaterialForm({ id: null, title: '', type: 'section', file_url: '', content: '' });
+    setMaterialFile(null);
+    loadModulesForCourse(materialCourseId, true);
+  } catch (err) {
+    console.error(err);
+    alert(err.response?.data?.msg || 'Failed to save section');
   }
+}
+function editMaterial(material) {
+  setMaterialForm({
+    id: material.id,
+    title: material.title || '',
+    type: material.type || 'section',
+    file_url: material.file_url || '',
+    content: material.content || '',
+  });
+}
+
+async function deleteMaterial(id) {
+  if (!window.confirm('Delete this section?')) return;
+
+  try {
+    await api.delete(`/courses/materials/${id}`);
+    alert('Section deleted');
+    loadModulesForCourse(materialCourseId, true);
+  } catch (err) {
+    console.error(err);
+    alert('Failed to delete section');
+  }
+}
 
   function openCourseModal(course = null) {
-    setCourseForm(
-      course
-        ? {
-            id: course.id,
-            name: course.name,
-            description: course.description || '',
-            category: inferCourseCategory(course),
-            image_url: course.image_url || '',
-          }
-        : { id: null, name: '', description: '', category: 'Development', image_url: '' }
-    );
-    setCourseImage(null);
-    setCourseModalOpen(true);
-  }
+  setCourseForm(
+    course
+      ? {
+          id: course.id,
+          name: course.name,
+          description: course.description || '',
+          category: inferCourseCategory(course),
+          image_url: course.image_url || '',
+          modules: [''],
+        }
+      : {
+          id: null,
+          name: '',
+          description: '',
+          category: 'Development',
+          image_url: '',
+          modules: [''],
+        }
+  );
+
+  setCourseImage(null);
+  setCourseModalOpen(true);
+}
 
   const resolveImageUrl = (url) => {
     if (!url) return '';
@@ -260,45 +338,113 @@ export default function AdminDashboard() {
     }
   }
 
+  function resetAssessmentForm() {
+    setQuizForm({
+      title: 'Section Assessment',
+      questions: [
+        { ...emptyAssessmentQuestion },
+        { ...emptyAssessmentQuestion },
+        { ...emptyAssessmentQuestion },
+      ],
+    });
+  }
+
   async function loadQuizForModule(moduleId) {
-    if (!moduleId) return;
+    if (!moduleId) {
+      resetAssessmentForm();
+      return;
+    }
+
     try {
       const { data } = await api.get(`/courses/modules/${moduleId}/quiz`);
-      if (data) {
+      const questions = Array.isArray(data) ? data : [];
+
+      if (questions.length > 0) {
         setQuizForm({
-          title: data.title || '',
-          question: data.question || '',
-          option_a: data.option_a || '',
-          option_b: data.option_b || '',
-          option_c: data.option_c || '',
-          option_d: data.option_d || '',
-          correct_option: data.correct_option || 'A',
+          title: questions[0]?.title || 'Section Assessment',
+          questions: questions.map((question) => ({
+            id: question.id,
+            question: question.question || '',
+            option_a: question.option_a || '',
+            option_b: question.option_b || '',
+            option_c: question.option_c || '',
+            option_d: question.option_d || '',
+            correct_option: question.correct_option || 'A',
+          })),
         });
       } else {
-        setQuizForm({
-          title: '',
-          question: '',
-          option_a: '',
-          option_b: '',
-          option_c: '',
-          option_d: '',
-          correct_option: 'A',
-        });
+        resetAssessmentForm();
       }
     } catch (err) {
       console.error(err);
+      resetAssessmentForm();
     }
+  }
+
+  function updateAssessmentQuestion(index, field, value) {
+    const updatedQuestions = quizForm.questions.map((question, questionIndex) =>
+      questionIndex === index ? { ...question, [field]: value } : question
+    );
+
+    setQuizForm({ ...quizForm, questions: updatedQuestions });
+  }
+
+  function addAssessmentQuestion() {
+    setQuizForm({
+      ...quizForm,
+      questions: [...quizForm.questions, { ...emptyAssessmentQuestion }],
+    });
+  }
+
+  function removeAssessmentQuestion(index) {
+    if (quizForm.questions.length <= 3) {
+      alert('Assessment must have at least 3 questions.');
+      return;
+    }
+
+    const updatedQuestions = quizForm.questions.filter((_, questionIndex) => questionIndex !== index);
+    setQuizForm({ ...quizForm, questions: updatedQuestions });
   }
 
   async function handleSaveQuiz(e) {
     e.preventDefault();
+
     if (!quizModuleId) return;
+
+    const cleanQuestions = quizForm.questions.map((question) => ({
+      question: question.question.trim(),
+      option_a: question.option_a.trim(),
+      option_b: question.option_b.trim(),
+      option_c: question.option_c.trim(),
+      option_d: question.option_d.trim(),
+      correct_option: question.correct_option,
+    }));
+
+    if (cleanQuestions.length < 3) {
+      alert('Assessment must have at least 3 questions.');
+      return;
+    }
+
+    const hasInvalidQuestion = cleanQuestions.some(
+      (question) => !question.question || !question.option_a || !question.option_b || !question.correct_option
+    );
+
+    if (hasInvalidQuestion) {
+      alert('Each question must have a question, option A, option B, and correct answer.');
+      return;
+    }
+
     try {
-      await api.post(`/courses/modules/${quizModuleId}/quiz`, quizForm);
-      alert('Quiz saved for this unit');
+      await api.post(`/courses/modules/${quizModuleId}/quiz`, {
+        title: quizForm.title || 'Section Assessment',
+        questions: cleanQuestions,
+      });
+
+      alert('Assessment saved for this section');
+      loadModulesForCourse(quizCourseId);
     } catch (err) {
       console.error(err);
-      alert(err.response?.data?.msg || 'Failed to save quiz');
+      alert(err.response?.data?.msg || 'Failed to save assessment');
     }
   }
 
@@ -521,9 +667,56 @@ export default function AdminDashboard() {
                 onChange={(e) => setCourseImage(e.target.files[0] || null)}
               />
               {courseForm.image_url && !courseImage && (
-                <img className="admin-modal-preview" src={resolveImageUrl(courseForm.image_url)} alt="" />
-              )}
-              <button type="submit" className="admin-primary-btn">
+  <img className="admin-modal-preview" src={resolveImageUrl(courseForm.image_url)} alt="" />
+)}
+
+{!courseForm.id && (
+  <>
+    <label>Course Modules</label>
+
+    {courseForm.modules.map((module, index) => (
+      <div key={index} style={{ display: 'flex', gap: '0.5rem' }}>
+        <input
+          type="text"
+          placeholder={`Module ${index + 1}`}
+          value={module}
+          onChange={(e) => {
+            const updatedModules = [...courseForm.modules];
+            updatedModules[index] = e.target.value;
+            setCourseForm({ ...courseForm, modules: updatedModules });
+          }}
+          required
+        />
+
+        {courseForm.modules.length > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              const updatedModules = courseForm.modules.filter((_, i) => i !== index);
+              setCourseForm({ ...courseForm, modules: updatedModules });
+            }}
+          >
+            X
+          </button>
+        )}
+      </div>
+    ))}
+
+    <button
+      type="button"
+      onClick={() =>
+        setCourseForm({
+          ...courseForm,
+          modules: [...courseForm.modules, ''],
+        })
+      }
+    >
+      + Add Module
+    </button>
+  </>
+)}
+
+<button type="submit" className="admin-primary-btn">
                 {courseForm.id ? 'Update public course' : 'Add public course'}
               </button>
             </form>
@@ -622,89 +815,232 @@ export default function AdminDashboard() {
   }
 
   function renderMaterials() {
-    return (
-      <div className="admin-section">
-        <h2 className="admin-title">Upload Notes &amp; Videos</h2>
+  return (
+    <div className="admin-section">
+      <h2 className="admin-title">Sections, Notes & Videos</h2>
 
-        <div className="admin-form-row">
-          <select
-            value={materialCourseId}
-            onChange={(e) => {
-              const v = e.target.value;
-              setMaterialCourseId(v);
-              setMaterialModuleId('');
-              loadModulesForCourse(v, true);
-            }}
-          >
-            <option value="">Select course</option>
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+      <div className="admin-form-row">
+        <select
+          value={materialCourseId}
+          onChange={(e) => {
+            const v = e.target.value;
+            setMaterialCourseId(v);
+            setMaterialModuleId('');
+            setMaterialForm({
+              id: null,
+              title: '',
+              type: 'section',
+              file_url: '',
+              content: '',
+            });
+            loadModulesForCourse(v, true);
+          }}
+        >
+          <option value="">Select course</option>
+          {courses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
 
-          <select
-            value={materialModuleId}
-            onChange={(e) => setMaterialModuleId(e.target.value)}
-          >
-            <option value="">Select module</option>
-            {materialModules.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.title}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={materialModuleId}
+          onChange={(e) => {
+            setMaterialModuleId(e.target.value);
+            setMaterialForm({
+              id: null,
+              title: '',
+              type: 'section',
+              file_url: '',
+              content: '',
+            });
+          }}
+        >
+          <option value="">Select module</option>
+          {materialModules.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.title}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        {materialModuleId && (
+      {materialModuleId && (
+        <>
           <form className="admin-form" onSubmit={handleUploadMaterial}>
-            <div className="admin-form-row">
+            <div className="admin-form-column admin-form-wide">
               <input
                 type="text"
-                placeholder="Material title"
+                placeholder="Section title"
                 value={materialForm.title}
                 onChange={(e) =>
                   setMaterialForm({ ...materialForm, title: e.target.value })
                 }
                 required
               />
-              <select
-                value={materialForm.type}
-                onChange={(e) =>
-                  setMaterialForm({ ...materialForm, type: e.target.value })
-                }
-              >
-                <option value="note">Note (PDF / Doc)</option>
-                <option value="video">Video</option>
-              </select>
-              <input
-                type="text"
-                placeholder="File URL or YouTube link (optional)"
-                value={materialForm.file_url}
-                onChange={(e) =>
-                  setMaterialForm({ ...materialForm, file_url: e.target.value })
-                }
-              />
-              <input
-                type="file"
-                accept={materialForm.type === 'video' ? 'video/*' : '.pdf,.doc,.docx,.ppt,.pptx,.txt,application/pdf'}
-                onChange={(e) => setMaterialFile(e.target.files[0] || null)}
-              />
-              <button type="submit">Upload</button>
+
+             <select
+  value={materialForm.type}
+  onChange={(e) =>
+    setMaterialForm({ ...materialForm, type: e.target.value })
+  }
+>
+  <option value="section">Section / Paragraph</option>
+
+  <option value="video">YouTube / Video</option>
+
+  <option value="note">File / PDF</option>
+</select>
+{materialForm.type === 'section' && (
+  <>
+    <textarea
+      placeholder="Write section paragraphs here..."
+      value={materialForm.content}
+      onChange={(e) =>
+        setMaterialForm({ ...materialForm, content: e.target.value })
+      }
+      required
+      style={{
+        minHeight: '180px',
+        padding: '0.7rem',
+        border: '1px solid var(--admin-line)',
+        borderRadius: '0.35rem',
+        fontSize: '0.9rem',
+        resize: 'vertical',
+      }}
+    />
+
+    <input
+      type="text"
+      placeholder="Optional: Paste YouTube video link for this section"
+      value={materialForm.file_url}
+      onChange={(e) =>
+        setMaterialForm({ ...materialForm, file_url: e.target.value })
+      }
+    />
+  </>
+)}
+
+              {(materialForm.type === 'video' || materialForm.type === 'note') && (
+                <>
+                  <input
+                    type="text"
+                    placeholder={
+                      materialForm.type === 'video'
+                        ? 'Paste YouTube link or video URL'
+                        : 'File URL optional'
+                    }
+                    value={materialForm.file_url}
+                    onChange={(e) =>
+                      setMaterialForm({ ...materialForm, file_url: e.target.value })
+                    }
+                  />
+
+                  <input
+                    type="file"
+                    accept={
+                      materialForm.type === 'video'
+                        ? 'video/*'
+                        : '.pdf,.doc,.docx,.ppt,.pptx,.txt,application/pdf'
+                    }
+                    onChange={(e) => setMaterialFile(e.target.files[0] || null)}
+                  />
+                </>
+              )}
+
+              <button type="submit">
+                {materialForm.id ? 'Update Section' : 'Save Section'}
+              </button>
+
+              {materialForm.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMaterialForm({
+                      id: null,
+                      title: '',
+                      type: 'section',
+                      file_url: '',
+                      content: '',
+                    });
+                    setMaterialFile(null);
+                  }}
+                >
+                  Cancel Edit
+                </button>
+              )}
             </div>
           </form>
-        )}
-      </div>
-    );
-  }
 
+          <div className="admin-table-panel">
+            <div className="admin-table-toolbar">
+              <div className="admin-table-count">
+                Existing sections/materials for this module
+              </div>
+            </div>
+
+            <div className="admin-table-shell">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Content / URL</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {materialModules
+                    .find((m) => String(m.id) === String(materialModuleId))
+                    ?.materials?.map((material) => (
+                      <tr key={material.id}>
+                        <td>{material.id}</td>
+                        <td>{material.title}</td>
+                        <td>{material.type}</td>
+                        <td>
+                          {material.type === 'section'
+                            ? `${(material.content || '').slice(0, 80)}...`
+                            : material.file_url || '—'}
+                        </td>
+                        <td>
+                          <button type="button" onClick={() => editMaterial(material)}>
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteMaterial(material.id)}
+                            style={{ marginLeft: '0.5rem', color: '#b91c1c' }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                  {!materialModules.find((m) => String(m.id) === String(materialModuleId))
+                    ?.materials?.length && (
+                    <tr>
+                      <td colSpan="5">No section/material added yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
   function renderQuizzes() {
     return (
       <div className="admin-section">
-        <h2 className="admin-title">Unit Quiz</h2>
+        <h2 className="admin-title">Section Assessment</h2>
         <p className="admin-sub">
-          Select a course unit and set the quiz students should answer after learning it.
+          Add at least 3 questions for each section. Students must score 80% or more before moving to the next section.
         </p>
 
         <div className="admin-form-row" style={{ marginBottom: '1rem' }}>
@@ -715,8 +1051,13 @@ export default function AdminDashboard() {
               setQuizCourseId(v);
               setQuizModuleId('');
               setQuizModules([]);
+              resetAssessmentForm();
+
               if (v) {
-                api.get(`/courses/${v}/modules`).then(({ data }) => setQuizModules(data)).catch(console.error);
+                api
+                  .get(`/courses/${v}/modules`)
+                  .then(({ data }) => setQuizModules(data))
+                  .catch(console.error);
               }
             }}
           >
@@ -736,10 +1077,10 @@ export default function AdminDashboard() {
               loadQuizForModule(v);
             }}
           >
-            <option value="">Select unit</option>
+            <option value="">Select section</option>
             {quizModules.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.title}
+                {m.title} {m.assessment_count >= 3 ? '✅' : '⚠️'}
               </option>
             ))}
           </select>
@@ -748,58 +1089,127 @@ export default function AdminDashboard() {
         {quizModuleId && (
           <form className="admin-form" onSubmit={handleSaveQuiz}>
             <div className="admin-form-column admin-form-wide">
-              <label>Quiz title</label>
+              <label>Assessment title</label>
               <input
                 value={quizForm.title}
                 onChange={(e) => setQuizForm({ ...quizForm, title: e.target.value })}
+                placeholder="Example: Section Assessment"
                 required
               />
 
-              <label>Question</label>
-              <input
-                value={quizForm.question}
-                onChange={(e) => setQuizForm({ ...quizForm, question: e.target.value })}
-                required
-              />
-
-              <label>Option A</label>
-              <input
-                value={quizForm.option_a}
-                onChange={(e) => setQuizForm({ ...quizForm, option_a: e.target.value })}
-                required
-              />
-
-              <label>Option B</label>
-              <input
-                value={quizForm.option_b}
-                onChange={(e) => setQuizForm({ ...quizForm, option_b: e.target.value })}
-                required
-              />
-
-              <label>Option C</label>
-              <input
-                value={quizForm.option_c}
-                onChange={(e) => setQuizForm({ ...quizForm, option_c: e.target.value })}
-              />
-
-              <label>Option D</label>
-              <input
-                value={quizForm.option_d}
-                onChange={(e) => setQuizForm({ ...quizForm, option_d: e.target.value })}
-              />
-
-              <label>Correct answer</label>
-              <select
-                value={quizForm.correct_option}
-                onChange={(e) => setQuizForm({ ...quizForm, correct_option: e.target.value })}
+              <div
+                style={{
+                  background: '#f8fbff',
+                  border: '1px solid var(--admin-line)',
+                  borderRadius: '0.45rem',
+                  padding: '0.85rem',
+                  color: '#334155',
+                  fontSize: '0.86rem',
+                  fontWeight: 700,
+                }}
               >
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-              </select>
+                Total questions: {quizForm.questions.length} — minimum required: 3 — pass mark: 80%
+              </div>
 
-              <button type="submit">Save quiz</button>
+              {quizForm.questions.map((question, index) => (
+                <div
+                  key={index}
+                  style={{
+                    border: '1px solid var(--admin-line)',
+                    borderRadius: '0.5rem',
+                    padding: '1rem',
+                    display: 'grid',
+                    gap: '0.65rem',
+                    background: '#ffffff',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: '1rem',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <strong style={{ color: 'var(--admin-text)' }}>Question {index + 1}</strong>
+
+                    {quizForm.questions.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() => removeAssessmentQuestion(index)}
+                        style={{
+                          background: 'transparent',
+                          color: '#b91c1c',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 800,
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  <label>Question</label>
+                  <textarea
+                    value={question.question}
+                    onChange={(e) => updateAssessmentQuestion(index, 'question', e.target.value)}
+                    placeholder="Write the question here..."
+                    required
+                    style={{
+                      minHeight: '80px',
+                      padding: '0.7rem',
+                      border: '1px solid var(--admin-line)',
+                      borderRadius: '0.35rem',
+                      fontSize: '0.9rem',
+                      resize: 'vertical',
+                    }}
+                  />
+
+                  <label>Option A</label>
+                  <input
+                    value={question.option_a}
+                    onChange={(e) => updateAssessmentQuestion(index, 'option_a', e.target.value)}
+                    required
+                  />
+
+                  <label>Option B</label>
+                  <input
+                    value={question.option_b}
+                    onChange={(e) => updateAssessmentQuestion(index, 'option_b', e.target.value)}
+                    required
+                  />
+
+                  <label>Option C</label>
+                  <input
+                    value={question.option_c}
+                    onChange={(e) => updateAssessmentQuestion(index, 'option_c', e.target.value)}
+                  />
+
+                  <label>Option D</label>
+                  <input
+                    value={question.option_d}
+                    onChange={(e) => updateAssessmentQuestion(index, 'option_d', e.target.value)}
+                  />
+
+                  <label>Correct answer</label>
+                  <select
+                    value={question.correct_option}
+                    onChange={(e) => updateAssessmentQuestion(index, 'correct_option', e.target.value)}
+                  >
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                  </select>
+                </div>
+              ))}
+
+              <button type="button" onClick={addAssessmentQuestion}>
+                + Add Question
+              </button>
+
+              <button type="submit">Save Assessment</button>
             </div>
           </form>
         )}
@@ -1801,7 +2211,7 @@ export default function AdminDashboard() {
               {activeTab === 'courses' && 'Public Courses'}
               {activeTab === 'modules' && 'Curriculum'}
               {activeTab === 'materials' && 'Materials'}
-              {activeTab === 'quizzes' && 'Quizzes'}
+              {activeTab === 'quizzes' && 'Assessments'}
               {activeTab === 'students' && 'Students'}
               {activeTab === 'products' && 'Products'}
               {activeTab === 'settings' && 'Settings'}

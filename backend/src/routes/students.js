@@ -18,11 +18,31 @@ async function ensureLearningTables() {
       option_c VARCHAR(255),
       option_d VARCHAR(255),
       correct_option VARCHAR(1) NOT NULL,
+      question_order INT DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY unique_module_quiz (module_id)
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
+
+  try {
+    await pool.query('ALTER TABLE module_quizzes DROP INDEX unique_module_quiz');
+  } catch (err) {
+    if (err.code !== 'ER_CANT_DROP_FIELD_OR_KEY') {
+      console.error('Index drop warning:', err.message);
+    }
+  }
+
+  const [quizColumns] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'module_quizzes'
+       AND COLUMN_NAME = 'question_order'`
+  );
+
+  if (quizColumns.length === 0) {
+    await pool.query('ALTER TABLE module_quizzes ADD COLUMN question_order INT DEFAULT 1');
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS module_completions (
@@ -73,9 +93,25 @@ async function ensureCourseImageColumn() {
   }
 }
 
+async function ensureMaterialContentColumn() {
+  const [columns] = await pool.query(
+    `SELECT COLUMN_NAME
+     FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = 'materials'
+       AND COLUMN_NAME = 'content'`
+  );
+
+  if (columns.length === 0) {
+    await pool.query('ALTER TABLE materials ADD COLUMN content LONGTEXT NULL');
+  }
+}
+
 async function syncLegacyStudentCourse(studentId, courseId) {
   if (!courseId) return;
+
   await ensureLearningTables();
+
   await pool.query(
     `INSERT IGNORE INTO student_courses (student_id, course_id, status, started_at)
      VALUES (?, ?, 'in_progress', NOW())`,
@@ -107,10 +143,7 @@ async function updateCourseProgressStatus(studentId, courseId) {
   );
 }
 
-/* =========================
-   STUDENT REGISTRATION
-   POST /api/students/register
-========================= */
+/* STUDENT REGISTRATION */
 router.post('/register', async (req, res) => {
   const { full_name, email, phone, password, course_id } = req.body;
 
@@ -119,10 +152,8 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    const [existing] = await pool.query(
-      'SELECT id FROM students WHERE email = ?',
-      [email]
-    );
+    const [existing] = await pool.query('SELECT id FROM students WHERE email = ?', [email]);
+
     if (existing.length > 0) {
       return res.status(409).json({ msg: 'Email already registered' });
     }
@@ -141,10 +172,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-/* =========================
-   STUDENT LOGIN
-   POST /api/students/login
-========================= */
+/* STUDENT LOGIN */
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -164,6 +192,7 @@ router.post('/login', async (req, res) => {
 
     const student = rows[0];
     const match = await bcrypt.compare(password, student.password);
+
     if (!match) {
       return res.status(401).json({ msg: 'Invalid credentials' });
     }
@@ -180,13 +209,12 @@ router.post('/login', async (req, res) => {
       expiresIn: '8h',
     });
 
-    // fetch course name
     let course = null;
+
     if (student.course_id) {
-      const [courses] = await pool.query(
-        'SELECT id, name FROM courses WHERE id = ?',
-        [student.course_id]
-      );
+      const [courses] = await pool.query('SELECT id, name FROM courses WHERE id = ?', [
+        student.course_id,
+      ]);
       course = courses[0] || null;
     }
 
@@ -205,13 +233,11 @@ router.post('/login', async (req, res) => {
   }
 });
 
-/* =========================
-   STUDENT DASHBOARD DATA
-   GET /api/students/dashboard
-========================= */
+/* STUDENT DASHBOARD */
 router.get('/dashboard', studentAuth, async (req, res) => {
   try {
     const { id, course_id } = req.student;
+
     await ensureCourseImageColumn();
     await ensureLearningTables();
     await syncLegacyStudentCourse(id, course_id);
@@ -220,6 +246,7 @@ router.get('/dashboard', studentAuth, async (req, res) => {
       'SELECT id, full_name, email, course_id FROM students WHERE id = ?',
       [id]
     );
+
     if (!studentRow) {
       return res.status(404).json({ msg: 'Student not found' });
     }
@@ -245,6 +272,7 @@ router.get('/dashboard', studentAuth, async (req, res) => {
     const courseIds = courseRows.map((item) => item.id);
 
     const modulesByCourse = new Map();
+
     if (courseIds.length > 0) {
       const [rows] = await pool.query(
         `SELECT m.course_id,
@@ -254,9 +282,11 @@ router.get('/dashboard', studentAuth, async (req, res) => {
                 smg.score AS grade_score,
                 smg.passed AS grade_passed,
                 smg.graded_at,
-                COUNT(mat.id) AS materials_count
+                COUNT(DISTINCT mat.id) AS materials_count,
+                COUNT(DISTINCT q.id) AS assessment_count
          FROM modules m
          LEFT JOIN materials mat ON mat.module_id = m.id
+         LEFT JOIN module_quizzes q ON q.module_id = m.id
          LEFT JOIN module_completions mc
            ON mc.module_id = m.id
           AND mc.student_id = ?
@@ -273,12 +303,17 @@ router.get('/dashboard', studentAuth, async (req, res) => {
         if (!modulesByCourse.has(row.course_id)) {
           modulesByCourse.set(row.course_id, []);
         }
+
         modulesByCourse.get(row.course_id).push({
           id: row.module_id,
           title: row.module_title,
           materials_count: Number(row.materials_count || 0),
+          assessment_count: Number(row.assessment_count || 0),
           completed: Boolean(row.completion_id),
-          grade_score: row.grade_score === null || row.grade_score === undefined ? null : Number(row.grade_score),
+          grade_score:
+            row.grade_score === null || row.grade_score === undefined
+              ? null
+              : Number(row.grade_score),
           grade_passed: Boolean(row.grade_passed),
           graded_at: row.graded_at,
         });
@@ -292,6 +327,7 @@ router.get('/dashboard', studentAuth, async (req, res) => {
       completed_modules: Number(item.completed_modules || 0),
       modules: modulesByCourse.get(item.id) || [],
     }));
+
     const course = courses.find((item) => item.status !== 'not_started') || null;
     const modules = course ? course.modules : [];
 
@@ -311,15 +347,17 @@ router.get('/dashboard', studentAuth, async (req, res) => {
   }
 });
 
+/* START COURSE */
 router.post('/courses/:courseId/start', studentAuth, async (req, res) => {
   const { courseId } = req.params;
 
   try {
     await ensureLearningTables();
-    const [[course]] = await pool.query(
-      'SELECT id, name FROM courses WHERE id = ?',
-      [courseId]
-    );
+
+    const [[course]] = await pool.query('SELECT id, name FROM courses WHERE id = ?', [
+      courseId,
+    ]);
+
     if (!course) {
       return res.status(404).json({ msg: 'Course not found' });
     }
@@ -338,36 +376,43 @@ router.post('/courses/:courseId/start', studentAuth, async (req, res) => {
   }
 });
 
-/* =========================
-   VIEW SINGLE MODULE MATERIALS
-   GET /api/students/modules/:moduleId
-========================= */
+/* VIEW SINGLE MODULE MATERIALS + ASSESSMENT */
 router.get('/modules/:moduleId', studentAuth, async (req, res) => {
   const { moduleId } = req.params;
 
   try {
+    await ensureMaterialContentColumn();
+    await ensureLearningTables();
+
     const [[moduleRow]] = await pool.query(
       'SELECT id, title, course_id FROM modules WHERE id = ?',
       [moduleId]
     );
+
     if (!moduleRow) {
       return res.status(404).json({ msg: 'Module not found' });
     }
 
     const [materials] = await pool.query(
-      'SELECT id, title, type, file_url, created_at FROM materials WHERE module_id = ? ORDER BY id ASC',
+      'SELECT id, title, type, file_url, content, created_at FROM materials WHERE module_id = ? ORDER BY id ASC',
       [moduleRow.id]
     );
 
-    await ensureLearningTables();
     const [[completion]] = await pool.query(
       'SELECT id, created_at FROM module_completions WHERE student_id = ? AND module_id = ?',
       [req.student.id, moduleRow.id]
     );
-    const [[quiz]] = await pool.query(
-      `SELECT id, module_id, title, question, option_a, option_b, option_c, option_d
+
+    const [[grade]] = await pool.query(
+      'SELECT score, passed, graded_at FROM student_module_grades WHERE student_id = ? AND module_id = ?',
+      [req.student.id, moduleRow.id]
+    );
+
+    const [quizRows] = await pool.query(
+      `SELECT id, module_id, title, question, option_a, option_b, option_c, option_d, question_order
        FROM module_quizzes
-       WHERE module_id = ?`,
+       WHERE module_id = ?
+       ORDER BY question_order ASC, id ASC`,
       [moduleRow.id]
     );
 
@@ -376,7 +421,14 @@ router.get('/modules/:moduleId', studentAuth, async (req, res) => {
       materials,
       completed: Boolean(completion),
       completion,
-      quiz: quiz || null,
+      quiz: quizRows,
+      assessment: {
+        questions_count: quizRows.length,
+        score: grade ? Number(grade.score) : null,
+        passed: grade ? Boolean(grade.passed) : false,
+        graded_at: grade?.graded_at || null,
+        pass_mark: 80,
+      },
     });
   } catch (err) {
     console.error(err);
@@ -384,23 +436,49 @@ router.get('/modules/:moduleId', studentAuth, async (req, res) => {
   }
 });
 
+/* COMPLETE MODULE - BLOCK IF ASSESSMENT NOT PASSED */
 router.post('/modules/:moduleId/complete', studentAuth, async (req, res) => {
   const { moduleId } = req.params;
 
   try {
     await ensureLearningTables();
+
     const [[moduleRow]] = await pool.query(
       'SELECT id, course_id FROM modules WHERE id = ?',
       [moduleId]
     );
+
     if (!moduleRow) {
       return res.status(404).json({ msg: 'Module not found' });
+    }
+
+    const [[assessmentCount]] = await pool.query(
+      'SELECT COUNT(id) AS total FROM module_quizzes WHERE module_id = ?',
+      [moduleId]
+    );
+
+    if (Number(assessmentCount.total || 0) < 3) {
+      return res.status(400).json({
+        msg: 'This section assessment is not ready yet. Admin must add at least 3 questions.',
+      });
+    }
+
+    const [[grade]] = await pool.query(
+      'SELECT score, passed FROM student_module_grades WHERE student_id = ? AND module_id = ?',
+      [req.student.id, moduleId]
+    );
+
+    if (!grade || Number(grade.score) < 80 || Number(grade.passed) !== 1) {
+      return res.status(403).json({
+        msg: 'You must pass the assessment with at least 80% before completing this section.',
+      });
     }
 
     await pool.query(
       'INSERT IGNORE INTO module_completions (student_id, module_id, created_at) VALUES (?, ?, NOW())',
       [req.student.id, moduleId]
     );
+
     await syncLegacyStudentCourse(req.student.id, moduleRow.course_id);
     await updateCourseProgressStatus(req.student.id, moduleRow.course_id);
 
@@ -411,21 +489,50 @@ router.post('/modules/:moduleId/complete', studentAuth, async (req, res) => {
   }
 });
 
+/* SUBMIT ASSESSMENT */
 router.post('/modules/:moduleId/quiz/submit', studentAuth, async (req, res) => {
   const { moduleId } = req.params;
-  const { answer } = req.body;
+  const { answers } = req.body;
 
   try {
     await ensureLearningTables();
-    const [[quiz]] = await pool.query(
-      'SELECT correct_option FROM module_quizzes WHERE module_id = ?',
+
+    const [questions] = await pool.query(
+      `SELECT id, correct_option
+       FROM module_quizzes
+       WHERE module_id = ?
+       ORDER BY question_order ASC, id ASC`,
       [moduleId]
     );
-    if (!quiz) {
-      return res.status(404).json({ msg: 'No quiz found for this unit' });
+
+    if (questions.length < 3) {
+      return res.status(400).json({
+        msg: 'Assessment is not ready. At least 3 questions are required.',
+      });
     }
 
-    const correct = String(answer || '').toUpperCase() === String(quiz.correct_option || '').toUpperCase();
+    if (!answers || typeof answers !== 'object') {
+      return res.status(400).json({ msg: 'Please answer all questions.' });
+    }
+
+    let correctCount = 0;
+
+    for (const q of questions) {
+      const submittedAnswer = String(answers[q.id] || '').toUpperCase();
+      const correctAnswer = String(q.correct_option || '').toUpperCase();
+
+      if (!submittedAnswer) {
+        return res.status(400).json({ msg: 'Please answer all questions.' });
+      }
+
+      if (submittedAnswer === correctAnswer) {
+        correctCount += 1;
+      }
+    }
+
+    const score = Math.round((correctCount / questions.length) * 100);
+    const passed = score >= 80 ? 1 : 0;
+
     await pool.query(
       `INSERT INTO student_module_grades (student_id, module_id, score, passed, graded_at)
        VALUES (?, ?, ?, ?, NOW())
@@ -433,24 +540,27 @@ router.post('/modules/:moduleId/quiz/submit', studentAuth, async (req, res) => {
          score = VALUES(score),
          passed = VALUES(passed),
          graded_at = NOW()`,
-      [req.student.id, moduleId, correct ? 100 : 0, correct ? 1 : 0]
+      [req.student.id, moduleId, score, passed]
     );
 
-    res.json({ correct, score: correct ? 100 : 0 });
+    res.json({
+      score,
+      passed: Boolean(passed),
+      correct_count: correctCount,
+      total_questions: questions.length,
+      pass_mark: 80,
+      msg: passed
+        ? 'Assessment passed. You can now complete this section.'
+        : 'Assessment failed. You need at least 80% to continue.',
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ msg: 'Server error' });
   }
 });
 
-/* =========================
-   ADMIN STUDENT MANAGEMENT
-   (Requires admin auth middleware, mounted separately)
-   GET /api/students (list)
-   PATCH /api/students/:id/status
-========================= */
+/* ADMIN STUDENT MANAGEMENT */
 router.get('/', async (req, res) => {
-  // this route is intended to be used with admin auth in index.js
   try {
     const [rows] = await pool.query(
       `SELECT s.id, s.full_name, s.email, s.phone, s.status,
@@ -459,6 +569,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN courses c ON c.id = s.course_id
        ORDER BY s.created_at DESC`
     );
+
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -475,10 +586,8 @@ router.patch('/:id/status', async (req, res) => {
   }
 
   try {
-    await pool.query('UPDATE students SET status = ? WHERE id = ?', [
-      status,
-      id,
-    ]);
+    await pool.query('UPDATE students SET status = ? WHERE id = ?', [status, id]);
+
     res.json({ msg: 'Status updated' });
   } catch (err) {
     console.error(err);
@@ -487,4 +596,3 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 module.exports = router;
-

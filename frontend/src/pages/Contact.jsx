@@ -118,7 +118,7 @@ export default function Contact() {
 
         .submit-btn {
           margin-top: 1.5rem;
-          background: var(--richblue);
+          background: var(--blue);
           color: #fff;
           border: none;
           padding: 0.8rem 1.5rem;
@@ -169,6 +169,7 @@ export default function Contact() {
                     required
                     value={form.name}
                     onChange={handleChange}
+                    placeholder="enter your full name"
                   />
                 </div>
 
@@ -180,6 +181,7 @@ export default function Contact() {
                     required
                     value={form.email}
                     onChange={handleChange}
+                    placeholder="enter your email address"
                   />
                 </div>
               </div>
@@ -192,6 +194,7 @@ export default function Contact() {
                     name="phone"
                     value={form.phone}
                     onChange={handleChange}
+                    placeholder="enter your phone number"
                   />
                 </div>
 
@@ -226,7 +229,7 @@ export default function Contact() {
 
               <button className="submit-btn">
                 <i className="fa-solid fa-paper-plane"></i>
-                Send Request
+                Submit Request
               </button>
             </form>
           </div>
