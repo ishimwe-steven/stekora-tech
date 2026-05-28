@@ -17,10 +17,25 @@ const RegisterAdmin = lazy(() => import('./pages/RegisterAdmin'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const Contact = lazy(() => import('./pages/Contact'));
 
+
+/* NEW */
+const FinalExamPage = lazy(() => import('./pages/FinalExamPage'));
+const StudentCertificates = lazy(() => import('./pages/StudentCertificates'));
+const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate'));
+
+
 export default function App() {
   return (
-    <Suspense fallback={<div style={{ padding: '2rem', color: '#003366' }}>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div style={{ padding: '2rem', color: '#003366' }}>
+          Loading...
+        </div>
+      }
+    >
       <Routes>
+
+        {/* WEBSITE */}
         <Route element={<SiteLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
@@ -31,13 +46,46 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
         </Route>
+
+        {/* STUDENT */}
         <Route path="/login" element={<UserLogin />} />
         <Route path="/register" element={<UserRegister />} />
-        <Route path="/student/dashboard" element={<StudentDashboard />} />
-        <Route path="/student/course/:courseId/module/:moduleId" element={<StudentModuleView />} />
+
+        <Route
+          path="/student/dashboard"
+          element={<StudentDashboard />}
+        />
+
+        <Route
+          path="/student/course/:courseId/module/:moduleId"
+          element={<StudentModuleView />}
+        />
+
+        {/* NEW FINAL EXAM */}
+        <Route
+          path="/student/course/:courseId/final-exam"
+          element={<FinalExamPage />}
+        />
+        
+
+        {/* CERTIFICATES */}
+        <Route
+          path="/student/certificates"
+          element={<StudentCertificates />}
+        />
+
+        {/* PUBLIC CERTIFICATE VERIFY */}
+        <Route
+          path="/certificate/:certificateCode"
+          element={<VerifyCertificate />}
+        />
+        
+
+        {/* ADMIN */}
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/admin/register" element={<RegisterAdmin />} />
+
       </Routes>
     </Suspense>
   );

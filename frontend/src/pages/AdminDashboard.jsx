@@ -16,7 +16,7 @@ const COURSE_CATEGORIES = ['Development', 'Backend', 'IoT', 'Design'];
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('overview'); // overview | courses | modules | materials | quizzes | students | products | settings
+  const [activeTab, setActiveTab] = useState('overview'); // overview | courses | modules | materials | quizzes | finalExam | students | products | settings
   const [overview, setOverview] = useState(null);
   const [courses, setCourses] = useState([]);
  const [courseForm, setCourseForm] = useState({
@@ -53,6 +53,7 @@ export default function AdminDashboard() {
     modules: '',
     students: '',
     products: '',
+    finalExam: '',
   });
   const emptyAssessmentQuestion = {
     question: '',
@@ -80,6 +81,25 @@ export default function AdminDashboard() {
     confirm_password: '',
   });
   const [learnOpen, setLearnOpen] = useState(true);
+  const emptyFinalExamQuestion = {
+    question_type: 'mcq',
+    question: '',
+    option_a: '',
+    option_b: '',
+    option_c: '',
+    option_d: '',
+    correct_option: 'A',
+    marks: 1,
+  };
+
+  const [finalExamCourseId, setFinalExamCourseId] = useState('');
+  const [finalExamQuestions, setFinalExamQuestions] = useState([
+    { ...emptyFinalExamQuestion },
+  ]);
+  const [examSubmissions, setExamSubmissions] = useState([]);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [reviewScores, setReviewScores] = useState({});
+  const [reviewComment, setReviewComment] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -1217,6 +1237,645 @@ async function deleteMaterial(id) {
     );
   }
 
+  async function loadFinalExamQuestions(courseId) {
+    if (!courseId) {
+      setFinalExamQuestions([{ ...emptyFinalExamQuestion }]);
+      return;
+    }
+
+    try {
+      const { data } = await api.get(`/final-exam/courses/${courseId}/questions`);
+
+      if (Array.isArray(data) && data.length > 0) {
+        setFinalExamQuestions(
+          data.map((question) => ({
+            id: question.id,
+            question_type: question.question_type || 'mcq',
+            question: question.question || '',
+            option_a: question.option_a || '',
+            option_b: question.option_b || '',
+            option_c: question.option_c || '',
+            option_d: question.option_d || '',
+            correct_option: question.correct_option || 'A',
+            marks: question.marks || 1,
+          }))
+        );
+      } else {
+        setFinalExamQuestions([{ ...emptyFinalExamQuestion }]);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to load final exam questions');
+      setFinalExamQuestions([{ ...emptyFinalExamQuestion }]);
+    }
+  }
+
+  function updateFinalExamQuestion(index, field, value) {
+    const updatedQuestions = finalExamQuestions.map((question, questionIndex) =>
+      questionIndex === index ? { ...question, [field]: value } : question
+    );
+
+    setFinalExamQuestions(updatedQuestions);
+  }
+
+  function addFinalExamQuestion() {
+    setFinalExamQuestions([
+      ...finalExamQuestions,
+      { ...emptyFinalExamQuestion },
+    ]);
+  }
+
+  function removeFinalExamQuestion(index) {
+    if (finalExamQuestions.length <= 1) {
+      alert('Final exam must have at least one question.');
+      return;
+    }
+
+    setFinalExamQuestions(
+      finalExamQuestions.filter((_, questionIndex) => questionIndex !== index)
+    );
+  }
+
+  async function handleSaveFinalExam(e) {
+    e.preventDefault();
+
+    if (!finalExamCourseId) {
+      alert('Please select a course first.');
+      return;
+    }
+
+    const cleanQuestions = finalExamQuestions.map((question) => ({
+      question_type: question.question_type || 'mcq',
+      question: question.question.trim(),
+      option_a: question.question_type === 'mcq' ? question.option_a.trim() : '',
+      option_b: question.question_type === 'mcq' ? question.option_b.trim() : '',
+      option_c: question.question_type === 'mcq' ? question.option_c.trim() : '',
+      option_d: question.question_type === 'mcq' ? question.option_d.trim() : '',
+      correct_option: question.question_type === 'mcq' ? question.correct_option : '',
+      marks: Number(question.marks || 1),
+    }));
+
+    const hasInvalidQuestion = cleanQuestions.some((question) => {
+      if (!question.question || !question.marks || question.marks < 1) return true;
+
+      if (question.question_type === 'mcq') {
+        return !question.option_a || !question.option_b || !question.correct_option;
+      }
+
+      return false;
+    });
+
+    if (hasInvalidQuestion) {
+      alert('For MCQ, question, option A, option B, correct answer, and marks are required. For open questions, question and marks are required.');
+      return;
+    }
+
+    try {
+      await api.post(`/final-exam/courses/${finalExamCourseId}/questions`, {
+        questions: cleanQuestions,
+      });
+
+      alert('Final exam saved successfully');
+      loadFinalExamQuestions(finalExamCourseId);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to save final exam');
+    }
+  }
+
+  async function loadFinalExamSubmissions() {
+    try {
+      const { data } = await api.get('/final-exam/submissions');
+      setExamSubmissions(data || []);
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to load exam submissions');
+    }
+  }
+
+  async function openSubmissionReview(submissionId) {
+    try {
+      const { data } = await api.get(`/final-exam/submissions/${submissionId}`);
+      const scores = {};
+
+      data.answers
+        ?.filter((answer) => answer.question_type === 'open')
+        .forEach((answer) => {
+          scores[answer.answer_id || answer.id] = answer.marks_awarded || 0;
+        });
+
+      setSelectedSubmission(data);
+      setReviewScores(scores);
+      setReviewComment(data.submission?.admin_comment || '');
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to open submission');
+    }
+  }
+
+  async function handleApproveSubmission(e) {
+    e.preventDefault();
+
+    if (!selectedSubmission?.submission?.id) return;
+
+    try {
+      const { data } = await api.post(
+        `/final-exam/submissions/${selectedSubmission.submission.id}/review`,
+        {
+          manual_scores: reviewScores,
+          admin_comment: reviewComment,
+        }
+      );
+
+      alert(data?.msg || 'Review saved successfully.');
+      setSelectedSubmission(null);
+      setReviewScores({});
+      setReviewComment('');
+      loadFinalExamSubmissions();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to review submission');
+    }
+  }
+
+  async function handleAllowRetake(submissionId) {
+    if (!window.confirm('Allow this student to retake the final exam?')) return;
+
+    try {
+      const { data } = await api.post(`/final-exam/submissions/${submissionId}/allow-retake`);
+      alert(data?.msg || 'Re-exam allowed for this student.');
+      loadFinalExamSubmissions();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to allow re-exam');
+    }
+  }
+
+  async function handleAssignCertificate(submissionId) {
+    if (!window.confirm('Assign certificate to this competent student?')) return;
+
+    try {
+      const { data } = await api.post(`/final-exam/submissions/${submissionId}/assign-certificate`);
+      alert(data?.msg || 'Certificate assigned successfully.');
+      loadFinalExamSubmissions();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.msg || 'Failed to assign certificate');
+    }
+  }
+
+  function renderFinalExam() {
+    const filteredSubmissions = filterTableRows(examSubmissions, 'finalExam', [
+      'id',
+      'student_name',
+      'student_email',
+      'course_name',
+      'status',
+      'total_score',
+      'certificate_code',
+      (submission) => (submission.certificate_id ? 'certificate assigned' : 'no certificate'),
+      (submission) => (Number(submission.retake_allowed) === 1 ? 'reexam allowed' : ''),
+    ]);
+
+    return (
+      <div className="admin-stack">
+        <div className="admin-section">
+          <div className="admin-section-head">
+            <div>
+              <h2 className="admin-title">Final Exam Questions</h2>
+              <p className="admin-sub">
+                Set final exam questions separately from student grading. Supports MCQ and open questions.
+              </p>
+            </div>
+          </div>
+
+          <div className="admin-form-row" style={{ marginBottom: '1rem' }}>
+            <select
+              value={finalExamCourseId}
+              onChange={(e) => {
+                const courseId = e.target.value;
+                setFinalExamCourseId(courseId);
+                loadFinalExamQuestions(courseId);
+              }}
+            >
+              <option value="">Select course to set exam</option>
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {finalExamCourseId ? (
+            <form className="admin-form" onSubmit={handleSaveFinalExam}>
+              <div className="admin-form-column admin-form-wide">
+                <div
+                  style={{
+                    background: '#f8fbff',
+                    border: '1px solid var(--admin-line)',
+                    borderRadius: '0.45rem',
+                    padding: '0.85rem',
+                    color: '#334155',
+                    fontSize: '0.86rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  Final exam is taken once only. If a student fails, admin can allow re-exam from the submissions table.
+                </div>
+
+                {finalExamQuestions.map((question, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      border: '1px solid var(--admin-line)',
+                      borderRadius: '0.5rem',
+                      padding: '1rem',
+                      display: 'grid',
+                      gap: '0.65rem',
+                      background: '#ffffff',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <strong style={{ color: 'var(--admin-text)' }}>
+                        Final Exam Question {index + 1}
+                      </strong>
+
+                      {finalExamQuestions.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeFinalExamQuestion(index)}
+                          style={{
+                            background: 'transparent',
+                            color: '#b91c1c',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: 800,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <label>Question type</label>
+                    <select
+                      value={question.question_type}
+                      onChange={(e) =>
+                        updateFinalExamQuestion(index, 'question_type', e.target.value)
+                      }
+                    >
+                      <option value="mcq">Multiple Choice</option>
+                      <option value="open">Open Question</option>
+                    </select>
+
+                    <label>Question</label>
+                    <textarea
+                      value={question.question}
+                      onChange={(e) =>
+                        updateFinalExamQuestion(index, 'question', e.target.value)
+                      }
+                      placeholder="Write the final exam question..."
+                      required
+                      style={{
+                        minHeight: '80px',
+                        padding: '0.7rem',
+                        border: '1px solid var(--admin-line)',
+                        borderRadius: '0.35rem',
+                        fontSize: '0.9rem',
+                        resize: 'vertical',
+                      }}
+                    />
+
+                    {question.question_type === 'mcq' && (
+                      <>
+                        <label>Option A</label>
+                        <input
+                          value={question.option_a}
+                          onChange={(e) =>
+                            updateFinalExamQuestion(index, 'option_a', e.target.value)
+                          }
+                          required
+                        />
+
+                        <label>Option B</label>
+                        <input
+                          value={question.option_b}
+                          onChange={(e) =>
+                            updateFinalExamQuestion(index, 'option_b', e.target.value)
+                          }
+                          required
+                        />
+
+                        <label>Option C</label>
+                        <input
+                          value={question.option_c}
+                          onChange={(e) =>
+                            updateFinalExamQuestion(index, 'option_c', e.target.value)
+                          }
+                        />
+
+                        <label>Option D</label>
+                        <input
+                          value={question.option_d}
+                          onChange={(e) =>
+                            updateFinalExamQuestion(index, 'option_d', e.target.value)
+                          }
+                        />
+
+                        <label>Correct answer</label>
+                        <select
+                          value={question.correct_option}
+                          onChange={(e) =>
+                            updateFinalExamQuestion(index, 'correct_option', e.target.value)
+                          }
+                        >
+                          <option value="A">A</option>
+                          <option value="B">B</option>
+                          <option value="C">C</option>
+                          <option value="D">D</option>
+                        </select>
+                      </>
+                    )}
+
+                    <label>Marks</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={question.marks}
+                      onChange={(e) =>
+                        updateFinalExamQuestion(index, 'marks', e.target.value)
+                      }
+                      required
+                    />
+                  </div>
+                ))}
+
+                <button type="button" onClick={addFinalExamQuestion}>
+                  + Add Final Exam Question
+                </button>
+
+                <button type="submit">Save Final Exam Questions</button>
+              </div>
+            </form>
+          ) : (
+            <p className="admin-sub">Select a course above to create or edit its final exam questions.</p>
+          )}
+        </div>
+
+        <div className="admin-section admin-table-panel">
+          <div className="admin-table-toolbar">
+            <div>
+              <h2 className="admin-title">Final Exam Grading & Submissions</h2>
+              <p className="admin-sub" style={{ marginBottom: 0 }}>
+                Review answers, allow re-exam for failed students, and assign certificates only to competent students.
+              </p>
+            </div>
+
+            <div className="admin-table-tools">
+              <div className="admin-table-count">
+                Showing {filteredSubmissions.length} of {examSubmissions.length} submissions
+              </div>
+              {renderTableSearch('finalExam', 'Search submissions:')}
+              <button type="button" className="admin-primary-btn" onClick={loadFinalExamSubmissions}>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="admin-table-shell">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Student</th>
+                  <th>Email</th>
+                  <th>Course</th>
+                  <th>Status</th>
+                  <th>Auto Score</th>
+                  <th>Total Score</th>
+                  <th>Certificate</th>
+                  <th>Re-exam</th>
+                  <th>Submitted</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredSubmissions.map((submission) => {
+                  const isCompetent =
+                    submission.status === 'approved' && Number(submission.total_score) >= 80;
+                  const isFailed = submission.status === 'rejected';
+                  const hasCertificate = Boolean(submission.certificate_id || submission.certificate_code);
+
+                  return (
+                    <tr key={submission.id}>
+                      <td>{submission.id}</td>
+                      <td>{submission.student_name}</td>
+                      <td>{submission.student_email || '—'}</td>
+                      <td>{submission.course_name}</td>
+                      <td>
+                        <strong
+                          style={{
+                            color:
+                              submission.status === 'approved'
+                                ? '#16a34a'
+                                : submission.status === 'rejected'
+                                  ? '#b91c1c'
+                                  : '#d97706',
+                          }}
+                        >
+                          {submission.status}
+                        </strong>
+                      </td>
+                      <td>{submission.auto_score}</td>
+                      <td>{submission.total_score}%</td>
+                      <td>{hasCertificate ? submission.certificate_code : 'Not assigned'}</td>
+                      <td>{Number(submission.retake_allowed) === 1 ? 'Allowed' : 'No'}</td>
+                      <td>
+                        {submission.submitted_at
+                          ? new Date(submission.submitted_at).toLocaleString()
+                          : '—'}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => openSubmissionReview(submission.id)}
+                        >
+                          Review
+                        </button>
+
+                        {isFailed && Number(submission.retake_allowed) !== 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleAllowRetake(submission.id)}
+                            style={{ marginLeft: '0.5rem', color: '#d97706' }}
+                          >
+                            Re-exam
+                          </button>
+                        )}
+
+                        {isCompetent && !hasCertificate && (
+                          <button
+                            type="button"
+                            onClick={() => handleAssignCertificate(submission.id)}
+                            style={{ marginLeft: '0.5rem', color: '#16a34a', fontWeight: 800 }}
+                          >
+                            Assign Certificate
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredSubmissions.length === 0 && (
+                  <tr>
+                    <td colSpan="11">No final exam submissions found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {selectedSubmission && (
+          <div
+            className="admin-modal-backdrop"
+            role="presentation"
+            onClick={() => setSelectedSubmission(null)}
+          >
+            <form
+              className="admin-modal"
+              style={{ width: 'min(900px, 100%)', maxHeight: '90vh', overflowY: 'auto' }}
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+              onSubmit={handleApproveSubmission}
+            >
+              <div className="admin-modal-head">
+                <h3>Review Final Exam Submission</h3>
+                <button type="button" onClick={() => setSelectedSubmission(null)}>
+                  X
+                </button>
+              </div>
+
+              <p className="admin-sub" style={{ marginBottom: 0 }}>
+                Student: <strong>{selectedSubmission.submission.student_name}</strong> — Course:{' '}
+                <strong>{selectedSubmission.submission.course_name}</strong>
+              </p>
+
+              <p className="admin-sub" style={{ marginBottom: 0 }}>
+                Current status: <strong>{selectedSubmission.submission.status}</strong> — Current score:{' '}
+                <strong>{selectedSubmission.submission.total_score}%</strong>
+              </p>
+
+              {selectedSubmission.answers.map((answer, index) => (
+                <div
+                  key={answer.id}
+                  style={{
+                    border: '1px solid var(--admin-line)',
+                    borderRadius: '0.5rem',
+                    padding: '1rem',
+                    display: 'grid',
+                    gap: '0.55rem',
+                  }}
+                >
+                  <strong>
+                    {index + 1}. {answer.question}
+                  </strong>
+
+                  {answer.question_type === 'mcq' ? (
+                    <>
+                      <p style={{ margin: 0 }}>
+                        Selected: <strong>{answer.selected_option || '—'}</strong>
+                      </p>
+                      <p style={{ margin: 0 }}>
+                        Correct: <strong>{answer.correct_option}</strong>
+                      </p>
+                      <p style={{ margin: 0 }}>
+                        Marks awarded: <strong>{answer.marks_awarded}</strong> / {answer.marks}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <label>Student open answer</label>
+                      <textarea
+                        value={answer.answer_text || ''}
+                        readOnly
+                        style={{
+                          minHeight: '110px',
+                          padding: '0.7rem',
+                          border: '1px solid var(--admin-line)',
+                          borderRadius: '0.35rem',
+                          fontSize: '0.9rem',
+                          resize: 'vertical',
+                        }}
+                      />
+
+                      <label>Marks awarded / {answer.marks}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={answer.marks}
+                        value={reviewScores[answer.id] ?? 0}
+                        onChange={(e) =>
+                          setReviewScores({
+                            ...reviewScores,
+                            [answer.id]: e.target.value,
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                </div>
+              ))}
+
+              <label>Admin comment</label>
+              <textarea
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Optional comment for student..."
+                style={{
+                  minHeight: '90px',
+                  padding: '0.7rem',
+                  border: '1px solid var(--admin-line)',
+                  borderRadius: '0.35rem',
+                  fontSize: '0.9rem',
+                  resize: 'vertical',
+                }}
+              />
+
+              <button type="submit" className="admin-primary-btn">
+                Save Review Only
+              </button>
+
+              {selectedSubmission.submission.status === 'approved' &&
+                Number(selectedSubmission.submission.total_score) >= 80 &&
+                !selectedSubmission.submission.certificate_id && (
+                  <button
+                    type="button"
+                    className="admin-primary-btn"
+                    onClick={() => handleAssignCertificate(selectedSubmission.submission.id)}
+                    style={{ background: '#16a34a' }}
+                  >
+                    Assign Certificate
+                  </button>
+                )}
+            </form>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderStudents() {
     if (students.length === 0) {
       // load on first open
@@ -2163,6 +2822,16 @@ async function deleteMaterial(id) {
                 </button>
                 <button
                   type="button"
+                  className={activeTab === 'finalExam' ? 'active' : ''}
+                  onClick={() => {
+                    setActiveTab('finalExam');
+                    loadFinalExamSubmissions();
+                  }}
+                >
+                  Final Exam
+                </button>
+                <button
+                  type="button"
                   className={activeTab === 'students' ? 'active' : ''}
                   onClick={() => {
                     setActiveTab('students');
@@ -2212,6 +2881,7 @@ async function deleteMaterial(id) {
               {activeTab === 'modules' && 'Curriculum'}
               {activeTab === 'materials' && 'Materials'}
               {activeTab === 'quizzes' && 'Assessments'}
+              {activeTab === 'finalExam' && 'Final Exam & Certificates'}
               {activeTab === 'students' && 'Students'}
               {activeTab === 'products' && 'Products'}
               {activeTab === 'settings' && 'Settings'}
@@ -2225,6 +2895,7 @@ async function deleteMaterial(id) {
             {activeTab === 'modules' && renderModules()}
             {activeTab === 'materials' && renderMaterials()}
             {activeTab === 'quizzes' && renderQuizzes()}
+            {activeTab === 'finalExam' && renderFinalExam()}
             {activeTab === 'students' && renderStudents()}
             {activeTab === 'products' && renderProducts()}
             {activeTab === 'settings' && renderSettings()}

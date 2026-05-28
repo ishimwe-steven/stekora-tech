@@ -315,6 +315,23 @@ export default function StudentDashboard() {
           color: #111827;
         }
 
+        .student-course-exam {
+          background: #8b5cf6;
+        }
+
+        .student-course-certificate {
+          background: #facc15;
+          color: #111827;
+        }
+
+        .student-course-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
         .confirm-backdrop {
           position: fixed;
           inset: 0;
@@ -399,6 +416,12 @@ export default function StudentDashboard() {
 
           <div className="dashboard-menu">
             <span className="active">All Courses</span>
+            <span
+              onClick={() => navigate('/student/certificates')}
+              style={{ cursor: 'pointer' }}
+            >
+              My Certificates
+            </span>
             <span>Profile</span>
             <span>Support</span>
             <span
@@ -476,33 +499,53 @@ export default function StudentDashboard() {
 
                           <span className="student-course-grade">{grade}%</span>
 
-                          {!modulesAvailable ? (
-                            <button
-                              type="button"
-                              className="student-course-waiting"
-                              disabled
-                              title="Wait admin to upload the module"
-                            >
-                              Waiting
-                            </button>
-                          ) : course.status === 'not_started' ? (
-                            <button
-                              type="button"
-                              className="student-course-start"
-                              onClick={() => setConfirmCourse(course)}
-                            >
-                              Start
-                            </button>
-                          ) : (
-                            nextModule && (
-                              <Link
-                                to={`/student/course/${course.id}/module/${nextModule.id}`}
-                                className="student-course-continue"
+                          <div className="student-course-actions">
+                            {!modulesAvailable ? (
+                              <button
+                                type="button"
+                                className="student-course-waiting"
+                                disabled
+                                title="Wait admin to upload the module"
                               >
-                                Continue
-                              </Link>
-                            )
-                          )}
+                                Waiting
+                              </button>
+                            ) : course.status === 'not_started' ? (
+                              <button
+                                type="button"
+                                className="student-course-start"
+                                onClick={() => setConfirmCourse(course)}
+                              >
+                                Start
+                              </button>
+                            ) : course.status === 'completed' || grade >= 100 ? (
+                              <>
+                                <Link
+                                  to={`/student/course/${course.id}/final-exam`}
+                                  className="student-course-start student-course-exam"
+                                  title="Take final exam"
+                                >
+                                  Final Exam
+                                </Link>
+
+                                <Link
+                                  to="/student/certificates"
+                                  className="student-course-start student-course-certificate"
+                                  title="View certificate after admin approval"
+                                >
+                                  Certificate
+                                </Link>
+                              </>
+                            ) : (
+                              nextModule && (
+                                <Link
+                                  to={`/student/course/${course.id}/module/${nextModule.id}`}
+                                  className="student-course-continue"
+                                >
+                                  Continue
+                                </Link>
+                              )
+                            )}
+                          </div>
                         </div>
                       </article>
                     );
